@@ -14,6 +14,14 @@ from models import User
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    # ВАЖНО: для production обязательно переопределить через переменную окружения
+    # На Railway иначе backend падал бы при попытке выдать токен.
+    print(
+        "WARNING: SECRET_KEY is not set. Using insecure default key. "
+        "Set SECRET_KEY in environment for production."
+    )
+    SECRET_KEY = "dev-insecure-secret-change-me"
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))
 
