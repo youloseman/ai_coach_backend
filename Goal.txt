@@ -1,0 +1,12 @@
+{
+  "week_start_date": "2025-12-02",
+  "goal": {
+    "main_goal_type": "HALF_IRONMAN",
+    "main_goal_target_time": "4:30",
+    "main_goal_race_date": "2026-05-24",
+    "secondary_goals": ["10K under 40:00 by 2025-01-11"]
+  },
+  "available_hours_per_week": 8,
+  "progress_weeks": 8,
+  "notes": "Training Preferences:\n- Tuesday: Interval training with running club\n- Thursday: Track intervals with club (~10km)\n- Sunday: Long run day\n- Cycling: Avoid back-to-back days\n- Swimming: Once per week"
+}

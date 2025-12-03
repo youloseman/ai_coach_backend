@@ -1,0 +1,66 @@
+# .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+triathlon_coach.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Strava tokens (legacy)
+strava_token.json
+
+# Data files
+data/
+exports/
+data/calendar_exports/
+data/dashboards/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.env.local
+frontend/.turbo/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Alembic
+alembic/versions/*.pyc

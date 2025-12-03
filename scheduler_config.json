@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "day_of_week": "monday",
+  "time": "01:00",
+  "goal": {
+    "main_goal_type": "HALF_IRONMAN",
+    "main_goal_target_time": "4:30",
+    "main_goal_race_date": "2026-05-24",
+    "secondary_goals": [
+      "10K under 40:00 by 2025-01-11"
+    ]
+  },
+  "available_hours_per_week": 8.0,
+  "progress_weeks": 8,
+  "notes": "Training Preferences:\n- Tuesday: Interval training with running club (group workout)\n- Thursday: Track intervals with running club (~10km total)\n- Sunday: Long run day (preferred for weekly long run)\n- Cycling: Avoid back-to-back days, prefer Mon/Wed/Sat or similar spacing\n- Swimming: Once per week (Tue or Thu evening preferred)\n\nImportant: Tuesday and Thursday runs are with the club and should be interval/tempo sessions. Sunday is for long aerobic runs."
+}
