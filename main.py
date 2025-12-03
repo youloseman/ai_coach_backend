@@ -47,9 +47,10 @@ app = FastAPI()
 init_db()
 
 # CORS middleware
+# Для локального фронта (http://localhost:3000) и прод-сценариев через Railway
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8000"],
+    allow_origins=["*"],  # в dev можно открыть для всех, при желании сузим позже
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
