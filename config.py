@@ -8,24 +8,37 @@ import logging
 # Загружаем переменные окружения
 load_dotenv()
 
+# ===== STRAVA CONFIG =====
 STRAVA_CLIENT_ID = os.getenv("STRAVA_CLIENT_ID")
 STRAVA_CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET")
 STRAVA_REDIRECT_URI = os.getenv("STRAVA_REDIRECT_URI")
 
 if not STRAVA_CLIENT_ID or not STRAVA_CLIENT_SECRET or not STRAVA_REDIRECT_URI:
-    raise RuntimeError("Please set STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET and STRAVA_REDIRECT_URI in .env")
+    # Не падаем, чтобы backend мог стартовать на Railway даже без Strava-конфига
+    print(
+        "WARNING: STRAVA_CLIENT_ID / STRAVA_CLIENT_SECRET / STRAVA_REDIRECT_URI "
+        "not set. Strava OAuth will not work until these are configured."
+    )
 
+# ===== OPENAI CONFIG =====
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise RuntimeError("Please set OPENAI_API_KEY in .env")
 
-# Файл для хранения Strava токенов (MVP: один пользователь)
+if not OPENAI_API_KEY:
+    # Не падаем, чтобы /health и базовые эндпоинты работали без ключа
+    print(
+        "WARNING: OPENAI_API_KEY not set. AI features (plans, reports, analysis) "
+        "will be disabled until OPENAI_API_KEY is configured."
+    )
+    openai_client = None
+else:
+    # Клиент OpenAI
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+
+# Файл для хранения Strava токенов (исторический, для одного пользователя)
 TOKENS_FILE = Path("strava_token.json")
 
-# Клиент OpenAI
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
-
+# ===== EMAIL CONFIG =====
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_USER = os.getenv("EMAIL_USER")

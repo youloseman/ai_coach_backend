@@ -182,8 +182,6 @@ async def get_current_form_status():
             "status": "unknown"
         }
 
-# ===== FATIGUE DETECTION =====
-
 @app.get("/analytics/fatigue")
 async def get_fatigue_analysis(weeks: int = 4):
     """
@@ -262,7 +260,7 @@ async def predict_race_performance(
             today = dt.date.today()
             metrics = calculate_training_metrics(activities, today, days=90)
             current_tsb = metrics[-1].tsb if metrics else None
-        except:
+        except:  # noqa: E722
             current_tsb = None
         
         # Делаем прогноз
@@ -305,7 +303,7 @@ async def get_all_race_predictions(sport: str = "run", weeks: int = 12):
             today = dt.date.today()
             metrics = calculate_training_metrics(activities, today, days=90)
             current_tsb = metrics[-1].tsb if metrics else None
-        except:
+        except:  # noqa: E722
             current_tsb = None
         
         # Находим лучшие результаты
@@ -624,3 +622,5 @@ async def test_scheduler():
     except Exception as e:
         logger.error("scheduler_test_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
