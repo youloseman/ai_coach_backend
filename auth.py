@@ -35,7 +35,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    """Hash a password"""
+    """Hash a password.
+
+    bcrypt (используется через passlib) поддерживает только первые 72 байта секрета.
+    Чтобы не падать с ValueError на длинных паролях, безопасно усекаем пароль.
+    """
+    # Усекаем до 72 байт в UTF-8 представлении, как рекомендует passlib.
+    raw = password.encode("utf-8")
+    if len(raw) > 72:
+        raw = raw[:72]
+        password = raw.decode("utf-8", errors="ignore")
     return pwd_context.hash(password)
 
 
