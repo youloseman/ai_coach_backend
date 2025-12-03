@@ -17,6 +17,15 @@ router = APIRouter()
 @router.post("/auth/register", response_model=Token)
 async def register(user: UserCreate, db: Session = Depends(get_db)):
     """Register a new user and return access token."""
+    # bcrypt (через passlib) поддерживает только первые 72 байта пароля,
+    # поэтому слишком длинные пароли приводят к ValueError на сервере.
+    # Явно ограничиваем длину и возвращаем понятную ошибку.
+    if len(user.password.encode("utf-8")) > 72:
+        raise HTTPException(
+            status_code=400,
+            detail="Password too long. Please use a password up to 72 characters.",
+        )
+
     if crud.get_user_by_email(db, user.email):
         raise HTTPException(status_code=400, detail="Email already registered")
 
