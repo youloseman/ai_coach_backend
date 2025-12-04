@@ -80,7 +80,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           cd frontend
-          railway up
+          railway up --service frontend
 
 
 
