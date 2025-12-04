@@ -9,6 +9,7 @@ import models
 from schemas import UserCreate, Token, UserResponse
 from auth import verify_password, create_access_token, get_current_user
 import crud
+from config import logger
 
 
 router = APIRouter()
@@ -17,31 +18,42 @@ router = APIRouter()
 @router.post("/auth/register", response_model=Token)
 async def register(user: UserCreate, db: Session = Depends(get_db)):
     """Register a new user and return access token."""
-    # bcrypt (через passlib) поддерживает только первые 72 байта пароля,
-    # поэтому слишком длинные пароли приводят к ValueError на сервере.
-    # Явно ограничиваем длину и возвращаем понятную ошибку.
-    if len(user.password.encode("utf-8")) > 72:
+    try:
+        # bcrypt (через passlib) поддерживает только первые 72 байта пароля,
+        # поэтому слишком длинные пароли приводят к ValueError на сервере.
+        # Явно ограничиваем длину и возвращаем понятную ошибку.
+        if len(user.password.encode("utf-8")) > 72:
+            raise HTTPException(
+                status_code=400,
+                detail="Password too long. Please use a password up to 72 characters.",
+            )
+
+        if crud.get_user_by_email(db, user.email):
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+        if crud.get_user_by_username(db, user.username):
+            raise HTTPException(status_code=400, detail="Username already taken")
+
+        db_user = crud.create_user(db, user)
+        crud.update_user_last_login(db, db_user.id)
+
+        access_token = create_access_token(data={"sub": db_user.id})
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": UserResponse.model_validate(db_user),
+        }
+    except HTTPException:
+        # уже подготовленные понятные ошибки пробрасываем как есть
+        raise
+    except Exception as e:
+        # логируем неожиданную ошибку и возвращаем человекочитаемое сообщение
+        logger.error("auth_register_unexpected_error", error=str(e))
         raise HTTPException(
-            status_code=400,
-            detail="Password too long. Please use a password up to 72 characters.",
+            status_code=500,
+            detail=f"Internal error during registration: {str(e)}",
         )
-
-    if crud.get_user_by_email(db, user.email):
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    if crud.get_user_by_username(db, user.username):
-        raise HTTPException(status_code=400, detail="Username already taken")
-
-    db_user = crud.create_user(db, user)
-    crud.update_user_last_login(db, db_user.id)
-
-    access_token = create_access_token(data={"sub": db_user.id})
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": UserResponse.model_validate(db_user),
-    }
 
 
 @router.post("/auth/login", response_model=Token)
