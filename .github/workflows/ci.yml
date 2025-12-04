@@ -78,7 +78,9 @@ jobs:
       - name: Deploy frontend service
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service frontend ./frontend
+        run: |
+          cd frontend
+          railway up
 
 
 
