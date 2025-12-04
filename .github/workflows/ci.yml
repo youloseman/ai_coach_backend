@@ -73,7 +73,7 @@ jobs:
       - name: Deploy backend service
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service backend
+        run: railway up --service ai_coach_backend
 
       - name: Deploy frontend service
         env:
