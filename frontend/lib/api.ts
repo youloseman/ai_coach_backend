@@ -82,18 +82,30 @@ api.interceptors.response.use(
 
     const status = error.response?.status;
     const data = error.response?.data;
+    const requestUrl: string | undefined = error.config?.url;
 
-    // 401 - Unauthorized (токен истек)
+    // 401 - Unauthorized
     if (status === 401) {
+      const isAuthRequest =
+        requestUrl?.includes('/auth/login') || requestUrl?.includes('/auth/register');
+
+      // Для /auth/login и /auth/register не считаем это "просроченной сессией",
+      // просто пробрасываем нормальное сообщение об ошибке дальше.
+      if (isAuthRequest) {
+        const message = data?.detail || 'Incorrect email or password';
+        return Promise.reject(new Error(message));
+      }
+
+      // Для всех остальных запросов 401 трактуем как истёкший/некорректный токен.
       console.error('Token expired - logging out');
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      
+
       // Redirect to login only if not already on login page
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }
-      
+
       return Promise.reject(new Error('Session expired. Please login again.'));
     }
 

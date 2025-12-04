@@ -47,6 +47,14 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     except HTTPException:
         # уже подготовленные понятные ошибки пробрасываем как есть
         raise
+    except ValueError as e:
+        # Специально перехватываем ошибки passlib/bcrypt про 72 байта,
+        # чтобы не возвращать 500 и не палить внутренние детали реализации.
+        logger.error("auth_register_password_value_error", error=str(e))
+        raise HTTPException(
+            status_code=400,
+            detail="Password too long. Please use a password up to 72 characters.",
+        )
     except Exception as e:
         # логируем неожиданную ошибку и возвращаем человекочитаемое сообщение
         logger.error("auth_register_unexpected_error", error=str(e))
