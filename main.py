@@ -41,17 +41,19 @@ from api_user import router as user_router
 from api_coach import router as coach_router
 
 
-app = FastAPI()
+app = FastAPI(title="AI Triathlon Coach API")
 
 # Initialize database
 init_db()
 
 # CORS middleware
-# Разрешаем запросы с локального фронта и, при необходимости, с прод-домена фронта.
+# Разрешаем запросы с локального фронта и прод-фронта.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
+        "http://localhost:3000",  # локальный Next.js
+        "https://aicoach-frontend.vercel.app",  # ЗАМЕНИ если у тебя другой домен фронта
+        "https://aicoachbackend-production.up.railway.app",  # сам бекенд (на всякий)
     ],
     allow_credentials=True,
     allow_methods=["*"],
