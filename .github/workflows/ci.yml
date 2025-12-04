@@ -43,7 +43,12 @@ jobs:
           node-version: "20"
 
       - name: Install frontend dependencies
+        working-directory: ./frontend
         run: npm ci
+        
+      - name: Run frontend tests
+        working-directory: ./frontend
+        run: npm test
 
       - name: Lint frontend
         run: npm run lint
@@ -74,5 +79,6 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: railway up --service frontend --yes
+
 
 
