@@ -82,15 +82,21 @@ async def fetch_activities_last_n_weeks_for_user(
     return all_activities
 
 def _write_tokens_file(token_data: dict) -> None:
-    TOKENS_FILE.write_text(
-        json.dumps(token_data, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    try:
+        TOKENS_FILE.write_text(
+            json.dumps(token_data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        logger.warning("Failed to persist Strava tokens to disk: %s", e)
 
 
 def _persist_tokens(token_data: dict) -> None:
     _write_tokens_file(token_data)
-    save_state(STRAVA_TOKENS_STATE_KEY, token_data)
+    try:
+        save_state(STRAVA_TOKENS_STATE_KEY, token_data)
+    except Exception as e:
+        logger.warning("Failed to persist Strava tokens to DB: %s", e)
 
 
 def load_tokens() -> dict:
@@ -99,7 +105,11 @@ def load_tokens() -> dict:
     Если файла нет, пробуем восстановить их из БД.
     """
     if not TOKENS_FILE.exists():
-        persisted = load_state(STRAVA_TOKENS_STATE_KEY)
+        try:
+            persisted = load_state(STRAVA_TOKENS_STATE_KEY)
+        except Exception as e:
+            logger.warning("Failed to load Strava tokens from DB: %s", e)
+            persisted = None
         if not persisted:
             raise RuntimeError("No Strava tokens found. Authorize first via /auth/strava/login")
         _write_tokens_file(persisted)

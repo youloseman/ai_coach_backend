@@ -44,4 +44,3 @@ def load_state(key: str) -> Optional[Any]:
         return record.value if record else None
     finally:
         db.close()
-
