@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from sqlalchemy.orm import Session
@@ -536,9 +536,9 @@ async def strava_status():
 
 @app.get("/strava/webhook")
 async def strava_webhook_verify(
-    hub_mode: str,
-    hub_verify_token: str,
-    hub_challenge: str,
+    hub_mode: str = Query(..., alias="hub.mode"),
+    hub_verify_token: str = Query(..., alias="hub.verify_token"),
+    hub_challenge: str = Query(..., alias="hub.challenge"),
 ):
     """
     Verify Strava webhook subscription challenge.
