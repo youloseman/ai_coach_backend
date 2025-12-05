@@ -9,7 +9,7 @@ import datetime as dt
 import json
 from pathlib import Path
 import asyncio
-from config import logger, EMAIL_TO
+from config import logger, EMAIL_TO, FRONTEND_BASE_URL
 
 # Импорты из основного приложения
 from coach import GoalInput, WeeklyPlanRequest
@@ -246,6 +246,7 @@ async def send_automatic_weekly_report(config: SchedulerConfig):
         week_start_str = plan_data.get("week_start_date", str(next_monday))
         
         subject = f"🏊‍♂️🚴‍♂️🏃‍♂️ AI Coach – Weekly Report (week starting {week_start_str})"
+        dashboard_url = f"{FRONTEND_BASE_URL.rstrip('/')}/dashboard"
         
         # ВАЖНО: Здесь используется упрощённый HTML
         # Для полного HTML скопируйте код из coach_weekly_report_email в main.py
@@ -269,7 +270,7 @@ async def send_automatic_weekly_report(config: SchedulerConfig):
             <h2>Fatigue Level</h2>
             <p>{fatigue_analysis.get('overall_fatigue_level', 'unknown').upper()} (Score: {fatigue_analysis.get('fatigue_score', 0)}/100)</p>
             
-            <p><a href="http://127.0.0.1:8000/dashboard">View Full Dashboard</a></p>
+            <p><a href="{dashboard_url}">View Full Dashboard</a></p>
             
             <p style="margin-top: 40px; color: #666;">
                 This is an automatic report. To customize, edit scheduler_config.json or disable automatic reports.

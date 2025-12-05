@@ -49,7 +49,7 @@ from calendar_export import (
     get_calendar_download_url,
 )
 from multi_week_planner import generate_multi_week_plan, create_plan_summary_table
-from config import EMAIL_TO, logger
+from config import EMAIL_TO, FRONTEND_BASE_URL, logger
 from database import get_db
 from sqlalchemy.orm import Session
 import models
@@ -366,6 +366,8 @@ async def coach_weekly_plan_email(req: WeeklyPlanEmailRequest):
           <td>{day.get("description", "")}</td>
         </tr>
         """
+
+    dashboard_url = f"{FRONTEND_BASE_URL.rstrip('/')}/dashboard"
 
     html_body = f"""
     <html>
@@ -1088,7 +1090,7 @@ async def coach_weekly_report_email(req: WeeklyReportEmailRequest):
         <div class="section" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; padding: 20px; border-radius: 8px;">
           <h2 style="color: white; margin-top: 0;">📊 Interactive Dashboard</h2>
           <p style="margin: 10px 0;">View your complete training analytics with interactive charts and graphs.</p>
-          <a href="http://127.0.0.1:8000/dashboard" style="display: inline-block; padding: 12px 24px; background: white; color: #11998e; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 10px;">
+          <a href="{dashboard_url}" style="display: inline-block; padding: 12px 24px; background: white; color: #11998e; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 10px;">
             Open Training Dashboard →
           </a>
         </div>

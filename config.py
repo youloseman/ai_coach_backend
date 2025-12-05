@@ -46,6 +46,7 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 EMAIL_FROM = os.getenv("EMAIL_FROM", EMAIL_USER)
 EMAIL_TO = os.getenv("EMAIL_TO")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 
 if not RESEND_API_KEY and (not EMAIL_USER or not EMAIL_PASSWORD):
     # Можно не падать, а просто потом проверять это перед отправкой email
