@@ -81,6 +81,27 @@ async def fetch_activities_last_n_weeks_for_user(
     
     return all_activities
 
+async def fetch_activity_by_id(
+    activity_id: int,
+    user_id: int,
+    db: Session,
+    include_all_efforts: bool = False
+) -> dict:
+    """
+    Fetch a single Strava activity for a specific user.
+    """
+    tokens = await get_user_tokens(user_id, db)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    url = f"https://www.strava.com/api/v3/activities/{activity_id}"
+    params = {"include_all_efforts": str(include_all_efforts).lower()}
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=headers, params=params)
+
+    resp.raise_for_status()
+    return resp.json()
+
 def _write_tokens_file(token_data: dict) -> None:
     try:
         TOKENS_FILE.write_text(

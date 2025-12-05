@@ -20,6 +20,11 @@ def get_user_by_username(db: Session, username: str) -> Optional[User]:
     return db.query(User).filter(User.username == username).first()
 
 
+def get_user_by_strava_athlete_id(db: Session, athlete_id: str) -> Optional[User]:
+    """Get user by linked Strava athlete id"""
+    return db.query(User).filter(User.strava_athlete_id == str(athlete_id)).first()
+
+
 def create_user(db: Session, user: UserCreate) -> User:
     """Create new user with hashed password"""
     hashed_password = get_password_hash(user.password)
@@ -169,34 +174,51 @@ def get_weekly_plan_db(db: Session, user_id: int, week_start_date: date) -> Opti
 
 # ===== ACTIVITY CACHE =====
 
-def cache_activity(db: Session, user_id: int, strava_activity: dict):
-    """Cache Strava activity in database"""
+def _apply_activity_fields(activity: ActivityDB, user_id: int, strava_activity: dict):
+    activity.user_id = user_id
+    activity.strava_id = str(strava_activity["id"])
+    activity.name = strava_activity.get("name", "")
+    activity.sport_type = strava_activity.get("sport_type", strava_activity.get("type", ""))
+    start_date = strava_activity.get("start_date")
+    if start_date:
+        activity.start_date = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+    activity.distance_meters = strava_activity.get("distance")
+    activity.moving_time_seconds = strava_activity.get("moving_time")
+    activity.elapsed_time_seconds = strava_activity.get("elapsed_time")
+    activity.total_elevation_gain = strava_activity.get("total_elevation_gain")
+    activity.average_heartrate = strava_activity.get("average_heartrate")
+    activity.max_heartrate = strava_activity.get("max_heartrate")
+    activity.average_watts = strava_activity.get("average_watts")
+    activity.weighted_average_watts = strava_activity.get("weighted_average_watts")
+    activity.raw_data = strava_activity
+
+
+def upsert_activity(db: Session, user_id: int, strava_activity: dict) -> ActivityDB:
+    """Insert or update cached Strava activity."""
     existing = db.query(ActivityDB).filter(
         ActivityDB.strava_id == str(strava_activity["id"])
     ).first()
-    
+
     if existing:
+        _apply_activity_fields(existing, user_id, strava_activity)
+        db.commit()
+        db.refresh(existing)
         return existing
-    
-    activity = ActivityDB(
-        user_id=user_id,
-        strava_id=str(strava_activity["id"]),
-        name=strava_activity.get("name", ""),
-        sport_type=strava_activity.get("sport_type", strava_activity.get("type", "")),
-        start_date=datetime.fromisoformat(strava_activity["start_date"].replace("Z", "+00:00")),
-        distance_meters=strava_activity.get("distance"),
-        moving_time_seconds=strava_activity.get("moving_time"),
-        elapsed_time_seconds=strava_activity.get("elapsed_time"),
-        total_elevation_gain=strava_activity.get("total_elevation_gain"),
-        average_heartrate=strava_activity.get("average_heartrate"),
-        max_heartrate=strava_activity.get("max_heartrate"),
-        average_watts=strava_activity.get("average_watts"),
-        weighted_average_watts=strava_activity.get("weighted_average_watts"),
-        raw_data=strava_activity
-    )
-    
+
+    activity = ActivityDB()
+    _apply_activity_fields(activity, user_id, strava_activity)
     db.add(activity)
     db.commit()
     db.refresh(activity)
-    
     return activity
+
+
+def cache_activity(db: Session, user_id: int, strava_activity: dict):
+    """Backwards-compatible helper to upsert activity."""
+    return upsert_activity(db, user_id, strava_activity)
+
+
+def delete_activity_by_strava_id(db: Session, strava_activity_id: str) -> None:
+    """Delete cached activity by Strava activity id."""
+    db.query(ActivityDB).filter(ActivityDB.strava_id == str(strava_activity_id)).delete()
+    db.commit()

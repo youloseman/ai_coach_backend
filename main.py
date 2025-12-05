@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ import datetime as dt
 from config import (
     STRAVA_CLIENT_ID,
     STRAVA_REDIRECT_URI,
+    STRAVA_WEBHOOK_VERIFY_TOKEN,
     logger,
 )
 from analytics import (
@@ -26,10 +27,12 @@ from strava_client import (
     fetch_activities,
     fetch_activities_last_n_weeks,
     fetch_activities_last_n_weeks_for_user,
+    fetch_activity_by_id,
     load_tokens,
 )
 from strava_auth import save_strava_tokens
 from models import User
+import crud
 from auth import get_current_user
 from performance_predictions import predict_for_goal, find_best_efforts, predict_race_times
 from fatigue_detection import detect_fatigue
@@ -529,6 +532,85 @@ async def strava_status():
       }
   except Exception:
       return {"connected": False}
+
+
+@app.get("/strava/webhook")
+async def strava_webhook_verify(
+    hub_mode: str,
+    hub_verify_token: str,
+    hub_challenge: str,
+):
+    """
+    Verify Strava webhook subscription challenge.
+    """
+    if (
+        STRAVA_WEBHOOK_VERIFY_TOKEN
+        and hub_mode == "subscribe"
+        and hub_verify_token == STRAVA_WEBHOOK_VERIFY_TOKEN
+    ):
+        return JSONResponse({"hub.challenge": hub_challenge})
+
+    raise HTTPException(status_code=403, detail="Invalid verify token")
+
+
+@app.post("/strava/webhook")
+async def strava_webhook_event(request: Request, db: Session = Depends(get_db)):
+    """
+    Handle Strava webhook events (activity create/update/delete).
+    """
+    payload = await request.json()
+    logger.info("strava_webhook_event", payload=payload)
+
+    if payload.get("object_type") != "activity":
+        return {"status": "ignored"}
+
+    owner_id = payload.get("owner_id")
+    try:
+        activity_id = int(payload.get("object_id"))
+    except (TypeError, ValueError):
+        activity_id = None
+    aspect_type = payload.get("aspect_type")
+
+    if not owner_id or activity_id is None:
+        return {"status": "ignored"}
+
+    user = crud.get_user_by_strava_athlete_id(db, str(owner_id))
+    if not user:
+        logger.warning("strava_webhook_unknown_owner", owner_id=owner_id)
+        return {"status": "ignored"}
+
+    if aspect_type in ("create", "update"):
+        try:
+            activity = await fetch_activity_by_id(activity_id, user.id, db)
+            crud.upsert_activity(db, user.id, activity)
+            logger.info(
+                "strava_webhook_activity_upserted",
+                user_id=user.id,
+                activity_id=activity_id,
+                aspect=aspect_type,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error(
+                "strava_webhook_processing_failed",
+                activity_id=activity_id,
+                error=str(exc),
+            )
+            raise HTTPException(
+                status_code=500, detail="Failed to process webhook event"
+            )
+    elif aspect_type == "delete":
+        crud.delete_activity_by_strava_id(db, str(activity_id))
+        logger.info(
+            "strava_webhook_activity_deleted",
+            user_id=user.id,
+            activity_id=activity_id,
+        )
+    else:
+        logger.info("strava_webhook_aspect_ignored", aspect=aspect_type)
+
+    return {"status": "ok"}
 
 @app.get("/scheduler/config")
 async def get_scheduler_config():
