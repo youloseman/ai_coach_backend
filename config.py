@@ -45,10 +45,14 @@ EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 EMAIL_FROM = os.getenv("EMAIL_FROM", EMAIL_USER)
 EMAIL_TO = os.getenv("EMAIL_TO")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 
-if not EMAIL_USER or not EMAIL_PASSWORD:
+if not RESEND_API_KEY and (not EMAIL_USER or not EMAIL_PASSWORD):
     # Можно не падать, а просто потом проверять это перед отправкой email
-    print("WARNING: EMAIL_USER or EMAIL_PASSWORD not set. Email sending will not work.")
+    print(
+        "WARNING: Neither RESEND_API_KEY nor SMTP credentials configured. "
+        "Email sending will not work."
+    )
 
 # ===== TRAINING CONSTANTS =====
 DEFAULT_MAX_VOLUME_INCREASE_PCT = 10  # максимум +10% в неделю

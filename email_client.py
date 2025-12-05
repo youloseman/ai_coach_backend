@@ -3,22 +3,32 @@ import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from config import EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD, EMAIL_FROM
+from config import (
+    EMAIL_HOST,
+    EMAIL_PORT,
+    EMAIL_USER,
+    EMAIL_PASSWORD,
+    EMAIL_FROM,
+    RESEND_API_KEY,
+)
+from email_resend import send_html_email as send_html_email_resend
 
 
-def send_html_email(to_email: str, subject: str, html_body: str):
+def _send_via_smtp(to_email: str, subject: str, html_body: str) -> None:
     """
-    Простая отправка HTML-письма через SMTP (Gmail).
+    Отправка HTML-письма через SMTP (например, Gmail).
     """
     if not EMAIL_USER or not EMAIL_PASSWORD:
-        raise RuntimeError("Email settings are not configured. Check EMAIL_USER and EMAIL_PASSWORD in .env")
+        raise RuntimeError(
+            "SMTP settings are not configured. "
+            "Set EMAIL_USER/EMAIL_PASSWORD or provide RESEND_API_KEY."
+        )
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = EMAIL_FROM
     msg["To"] = to_email
 
-    # HTML-версия
     part_html = MIMEText(html_body, "html", "utf-8")
     msg.attach(part_html)
 
@@ -28,3 +38,15 @@ def send_html_email(to_email: str, subject: str, html_body: str):
         server.starttls(context=context)
         server.login(EMAIL_USER, EMAIL_PASSWORD)
         server.sendmail(EMAIL_FROM, [to_email], msg.as_string())
+
+
+def send_html_email(to_email: str, subject: str, html_body: str) -> None:
+    """
+    Отправляет письмо через Resend (если RESEND_API_KEY настроен),
+    иначе падает обратно на SMTP.
+    """
+    if RESEND_API_KEY:
+        send_html_email_resend(to_email, subject, html_body)
+        return
+
+    _send_via_smtp(to_email, subject, html_body)
