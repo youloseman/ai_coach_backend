@@ -5,12 +5,17 @@ Used to keep critical settings (Strava tokens, coach profile, etc.) across deplo
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
 import models
+
+
+logger = logging.getLogger(__name__)
 
 
 def _get_state_record(db: Session, key: str) -> Optional[models.AppState]:
@@ -30,6 +35,9 @@ def save_state(key: str, value: Any) -> None:
         else:
             record.value = value
         db.commit()
+    except SQLAlchemyError as exc:
+        logger.warning("Failed to persist state '%s': %s", key, exc)
+        db.rollback()
     finally:
         db.close()
 
@@ -42,5 +50,8 @@ def load_state(key: str) -> Optional[Any]:
     try:
         record = _get_state_record(db, key)
         return record.value if record else None
+    except SQLAlchemyError as exc:
+        logger.warning("Failed to load state '%s': %s", key, exc)
+        return None
     finally:
         db.close()

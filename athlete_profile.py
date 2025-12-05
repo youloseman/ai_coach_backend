@@ -65,9 +65,12 @@ class AthleteProfile(BaseModel):
 
 
 def _write_profile_file(profile: AthleteProfile) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with PROFILE_PATH.open("w", encoding="utf-8") as f:
-        json.dump(profile.model_dump(), f, ensure_ascii=False, indent=2)
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with PROFILE_PATH.open("w", encoding="utf-8") as f:
+            json.dump(profile.model_dump(), f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning("Failed to persist athlete profile to disk: %s", e)
 
 
 def load_athlete_profile() -> AthleteProfile:
@@ -76,11 +79,19 @@ def load_athlete_profile() -> AthleteProfile:
     Если файла нет или он битый — возвращаем профиль по умолчанию.
     """
     if not PROFILE_PATH.exists():
-        persisted = load_state(PROFILE_STATE_KEY)
+        persisted = None
+        try:
+            persisted = load_state(PROFILE_STATE_KEY)
+        except Exception as e:
+            logger.warning("Failed to load athlete profile from DB: %s", e)
+
         if persisted:
-            profile = AthleteProfile(**persisted)
-            _write_profile_file(profile)
-            return profile
+            try:
+                profile = AthleteProfile(**persisted)
+                _write_profile_file(profile)
+                return profile
+            except Exception as e:
+                logger.warning("Failed to restore athlete profile snapshot: %s", e)
         return AthleteProfile()
 
     try:
@@ -97,4 +108,7 @@ def save_athlete_profile(profile: AthleteProfile) -> None:
     Сохраняем профиль в JSON.
     """
     _write_profile_file(profile)
-    save_state(PROFILE_STATE_KEY, profile.model_dump())
+    try:
+        save_state(PROFILE_STATE_KEY, profile.model_dump())
+    except Exception as e:
+        logger.warning("Failed to persist athlete profile snapshot: %s", e)
