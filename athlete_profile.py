@@ -6,12 +6,15 @@ from typing import Any, Dict, List, Optional, Literal
 
 from pydantic import BaseModel, Field
 
+from state_store import load_state, save_state
+
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 PROFILE_PATH = DATA_DIR / "athlete_profile.json"
+PROFILE_STATE_KEY = "coach_profile"
 
 logger = logging.getLogger(__name__)
 
@@ -61,12 +64,23 @@ class AthleteProfile(BaseModel):
     zones_last_updated: Optional[str] = None  # ISO date when zones were last calculated
 
 
+def _write_profile_file(profile: AthleteProfile) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with PROFILE_PATH.open("w", encoding="utf-8") as f:
+        json.dump(profile.model_dump(), f, ensure_ascii=False, indent=2)
+
+
 def load_athlete_profile() -> AthleteProfile:
     """
     Загружаем профиль из data/athlete_profile.json.
     Если файла нет или он битый — возвращаем профиль по умолчанию.
     """
     if not PROFILE_PATH.exists():
+        persisted = load_state(PROFILE_STATE_KEY)
+        if persisted:
+            profile = AthleteProfile(**persisted)
+            _write_profile_file(profile)
+            return profile
         return AthleteProfile()
 
     try:
@@ -82,6 +96,5 @@ def save_athlete_profile(profile: AthleteProfile) -> None:
     """
     Сохраняем профиль в JSON.
     """
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with PROFILE_PATH.open("w", encoding="utf-8") as f:
-        json.dump(profile.model_dump(), f, ensure_ascii=False, indent=2)
+    _write_profile_file(profile)
+    save_state(PROFILE_STATE_KEY, profile.model_dump())

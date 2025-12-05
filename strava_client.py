@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 
 from strava_auth import get_user_tokens
 from config import STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, TOKENS_FILE, logger
+from state_store import load_state, save_state
+
+STRAVA_TOKENS_STATE_KEY = "strava_tokens"
 
 
 async def fetch_activities_for_user(
@@ -78,13 +81,29 @@ async def fetch_activities_last_n_weeks_for_user(
     
     return all_activities
 
+def _write_tokens_file(token_data: dict) -> None:
+    TOKENS_FILE.write_text(
+        json.dumps(token_data, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def _persist_tokens(token_data: dict) -> None:
+    _write_tokens_file(token_data)
+    save_state(STRAVA_TOKENS_STATE_KEY, token_data)
+
+
 def load_tokens() -> dict:
     """
     Загружаем токены из файла strava_token.json.
-    Если файла нет, значит пользователь ещё не авторизовался.
+    Если файла нет, пробуем восстановить их из БД.
     """
     if not TOKENS_FILE.exists():
-        raise RuntimeError("No Strava tokens found. Authorize first via /auth/strava/login")
+        persisted = load_state(STRAVA_TOKENS_STATE_KEY)
+        if not persisted:
+            raise RuntimeError("No Strava tokens found. Authorize first via /auth/strava/login")
+        _write_tokens_file(persisted)
+        return persisted
     return json.loads(TOKENS_FILE.read_text(encoding="utf-8"))
 
 
@@ -120,10 +139,7 @@ async def refresh_access_token_if_needed(tokens: dict) -> dict:
 
     new_tokens = resp.json()
     # сохраняем обновлённые токены в файл
-    TOKENS_FILE.write_text(
-        json.dumps(new_tokens, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    _persist_tokens(new_tokens)
     return new_tokens
 
 
@@ -162,10 +178,7 @@ async def exchange_code_for_token(code: str) -> dict:
     token_data = resp.json()
 
     # Сохраняем токены в файл в UTF-8
-    TOKENS_FILE.write_text(
-        json.dumps(token_data, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    _persist_tokens(token_data)
 
     return token_data
 

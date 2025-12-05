@@ -207,3 +207,12 @@ class TrainingLoadDB(Base):
     __table_args__ = (
         {'sqlite_autoincrement': True},
     )
+
+
+class AppState(Base):
+    """Simple key-value storage for JSON blobs (e.g., persisted settings)"""
+    __tablename__ = "app_state"
+
+    key = Column(String, primary_key=True)
+    value = Column(JSON, nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
