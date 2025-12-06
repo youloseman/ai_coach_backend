@@ -42,6 +42,8 @@ from scheduler import SchedulerConfig, send_automatic_weekly_report
 from api_auth import router as auth_router
 from api_user import router as user_router
 from api_coach import router as coach_router
+from api_segments import router as segments_router
+from segment_sync import sync_segment_efforts_for_activity, detect_personal_records
 
 
 app = FastAPI(title="AI Triathlon Coach API")
@@ -66,6 +68,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(coach_router)
+app.include_router(segments_router)
 
 
 # ===== ANALYTICS =====
@@ -582,13 +585,35 @@ async def strava_webhook_event(request: Request, db: Session = Depends(get_db)):
     if aspect_type in ("create", "update"):
         try:
             activity = await fetch_activity_by_id(activity_id, user.id, db)
-            crud.upsert_activity(db, user.id, activity)
+            activity_db = crud.upsert_activity(db, user.id, activity)
             logger.info(
                 "strava_webhook_activity_upserted",
                 user_id=user.id,
                 activity_id=activity_id,
                 aspect=aspect_type,
             )
+            
+            # Sync segment efforts for this activity
+            try:
+                segments_count = await sync_segment_efforts_for_activity(
+                    db=db,
+                    user_id=user.id,
+                    activity_db=activity_db,
+                    strava_activity_id=str(activity_id)
+                )
+                if segments_count > 0:
+                    logger.info("segments_synced", activity_id=activity_id, count=segments_count)
+            except Exception as e:
+                logger.warning("segment_sync_failed", activity_id=activity_id, error=str(e))
+            
+            # Detect personal records
+            try:
+                prs_detected = detect_personal_records(db, user.id, activity_db)
+                if prs_detected:
+                    logger.info("personal_records_detected", activity_id=activity_id, prs=prs_detected)
+            except Exception as e:
+                logger.warning("pr_detection_failed", activity_id=activity_id, error=str(e))
+                
         except HTTPException:
             raise
         except Exception as exc:

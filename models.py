@@ -41,6 +41,9 @@ class User(Base):
     weekly_plans = relationship("WeeklyPlanDB", back_populates="user")
     activities = relationship("ActivityDB", back_populates="user")
     goals = relationship("GoalDB", back_populates="user")
+    segment_efforts = relationship("SegmentEffortDB", backref="user_efforts")
+    personal_records = relationship("PersonalRecordDB", backref="user_records")
+    injury_risks = relationship("InjuryRiskDB", backref="user_risks")
 
 
 class AthleteProfileDB(Base):
@@ -178,6 +181,8 @@ class ActivityDB(Base):
     
     # Relationships
     user = relationship("User", back_populates="activities")
+    segment_efforts = relationship("SegmentEffortDB", back_populates="activity")
+    personal_records = relationship("PersonalRecordDB", back_populates="activity")
 
 
 class TrainingLoadDB(Base):
@@ -216,3 +221,158 @@ class AppState(Base):
     key = Column(String, primary_key=True)
     value = Column(JSON, nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class SegmentDB(Base):
+    """Strava segments"""
+    __tablename__ = "segments"
+    
+    id = Column(Integer, primary_key=True)
+    strava_segment_id = Column(String, unique=True, nullable=False, index=True)
+    
+    # Basic info
+    name = Column(String, nullable=False)
+    activity_type = Column(String, nullable=False)  # Run, Ride
+    distance_meters = Column(Float, nullable=False)
+    
+    # Location
+    city = Column(String, nullable=True)
+    state = Column(String, nullable=True)
+    country = Column(String, nullable=True)
+    
+    # Elevation
+    average_grade = Column(Float, nullable=True)
+    maximum_grade = Column(Float, nullable=True)
+    elevation_high = Column(Float, nullable=True)
+    elevation_low = Column(Float, nullable=True)
+    total_elevation_gain = Column(Float, nullable=True)
+    
+    # Stats
+    athlete_count = Column(Integer, default=0)  # Total athletes who have ridden this segment
+    effort_count = Column(Integer, default=0)   # Total efforts on this segment
+    star_count = Column(Integer, default=0)     # Number of stars
+    
+    # Raw data from Strava
+    raw_data = Column(JSON, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    efforts = relationship("SegmentEffortDB", back_populates="segment")
+
+
+class SegmentEffortDB(Base):
+    """User's efforts on Strava segments"""
+    __tablename__ = "segment_efforts"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    activity_id = Column(Integer, ForeignKey("activities.id"), nullable=True, index=True)
+    segment_id = Column(Integer, ForeignKey("segments.id"), nullable=False, index=True)
+    
+    strava_effort_id = Column(String, unique=True, nullable=False, index=True)
+    
+    # Timing
+    start_date = Column(DateTime, nullable=False, index=True)
+    elapsed_time_seconds = Column(Integer, nullable=False)
+    moving_time_seconds = Column(Integer, nullable=True)
+    
+    # Performance
+    average_heartrate = Column(Float, nullable=True)
+    max_heartrate = Column(Float, nullable=True)
+    average_watts = Column(Float, nullable=True)
+    average_cadence = Column(Float, nullable=True)
+    
+    # Rankings (at time of effort)
+    pr_rank = Column(Integer, nullable=True)  # Personal rank (1 = PR)
+    kom_rank = Column(Integer, nullable=True)  # Overall rank on segment
+    
+    # Metadata
+    is_pr = Column(Boolean, default=False, index=True)  # Is this a Personal Record?
+    device_watts = Column(Boolean, default=False)  # True if power from device, not estimated
+    
+    # Raw data from Strava
+    raw_data = Column(JSON, nullable=True)
+    
+    # Timestamps
+    synced_at = Column(DateTime, default=func.now())
+    
+    # Relationships
+    user = relationship("User")
+    activity = relationship("ActivityDB")
+    segment = relationship("SegmentDB", back_populates="efforts")
+
+
+class PersonalRecordDB(Base):
+    """Personal records for different distances and activities"""
+    __tablename__ = "personal_records"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    activity_id = Column(Integer, ForeignKey("activities.id"), nullable=True, index=True)
+    
+    # Record type
+    sport_type = Column(String, nullable=False, index=True)  # run, bike, swim
+    distance_category = Column(String, nullable=False, index=True)  # 5K, 10K, HM, Marathon, 40K, etc.
+    
+    # Performance
+    distance_meters = Column(Float, nullable=False)
+    time_seconds = Column(Integer, nullable=False)
+    pace_per_km = Column(Float, nullable=True)  # seconds per km
+    speed_kmh = Column(Float, nullable=True)    # km/h
+    
+    # Additional metrics
+    average_heartrate = Column(Float, nullable=True)
+    average_watts = Column(Float, nullable=True)
+    elevation_gain = Column(Float, nullable=True)
+    
+    # Context
+    achieved_date = Column(DateTime, nullable=False, index=True)
+    activity_name = Column(String, nullable=True)
+    
+    # Status
+    is_current_pr = Column(Boolean, default=True, index=True)  # False if beaten
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    superseded_at = Column(DateTime, nullable=True)  # When this PR was beaten
+    
+    # Relationships
+    user = relationship("User")
+    activity = relationship("ActivityDB")
+
+
+class InjuryRiskDB(Base):
+    """AI-detected injury risk warnings"""
+    __tablename__ = "injury_risks"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    # Risk assessment
+    risk_level = Column(String, nullable=False)  # low, medium, high, critical
+    risk_type = Column(String, nullable=False)   # overtraining, sudden_spike, chronic_fatigue, etc.
+    
+    # Details
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    recommendation = Column(Text, nullable=False)
+    
+    # Metrics that triggered the warning
+    trigger_metrics = Column(JSON, nullable=True)  # {ctl: 120, atl: 80, tsb: -40, ...}
+    
+    # Status
+    detected_date = Column(Date, nullable=False, index=True)
+    acknowledged = Column(Boolean, default=False)
+    acknowledged_at = Column(DateTime, nullable=True)
+    resolved = Column(Boolean, default=False)
+    resolved_at = Column(DateTime, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User")

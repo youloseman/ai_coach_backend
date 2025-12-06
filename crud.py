@@ -3,7 +3,10 @@ from sqlalchemy import and_
 from datetime import datetime, date
 from typing import Optional, List
 
-from models import User, AthleteProfileDB, GoalDB, WeeklyPlanDB, ActivityDB
+from models import (
+    User, AthleteProfileDB, GoalDB, WeeklyPlanDB, ActivityDB,
+    SegmentDB, SegmentEffortDB, PersonalRecordDB, InjuryRiskDB
+)
 from schemas import UserCreate, ProfileUpdate, GoalCreate
 from auth import get_password_hash
 
@@ -222,3 +225,284 @@ def delete_activity_by_strava_id(db: Session, strava_activity_id: str) -> None:
     """Delete cached activity by Strava activity id."""
     db.query(ActivityDB).filter(ActivityDB.strava_id == str(strava_activity_id)).delete()
     db.commit()
+
+
+# ===== SEGMENT CRUD =====
+
+def upsert_segment(db: Session, strava_segment: dict) -> SegmentDB:
+    """Insert or update Strava segment."""
+    segment_id = str(strava_segment["id"])
+    existing = db.query(SegmentDB).filter(SegmentDB.strava_segment_id == segment_id).first()
+    
+    segment_data = {
+        "strava_segment_id": segment_id,
+        "name": strava_segment.get("name", ""),
+        "activity_type": strava_segment.get("activity_type", ""),
+        "distance_meters": strava_segment.get("distance", 0),
+        "city": strava_segment.get("city"),
+        "state": strava_segment.get("state"),
+        "country": strava_segment.get("country"),
+        "average_grade": strava_segment.get("average_grade"),
+        "maximum_grade": strava_segment.get("maximum_grade"),
+        "elevation_high": strava_segment.get("elevation_high"),
+        "elevation_low": strava_segment.get("elevation_low"),
+        "total_elevation_gain": strava_segment.get("total_elevation_gain"),
+        "athlete_count": strava_segment.get("athlete_count", 0),
+        "effort_count": strava_segment.get("effort_count", 0),
+        "star_count": strava_segment.get("star_count", 0),
+        "raw_data": strava_segment,
+    }
+    
+    if existing:
+        for key, value in segment_data.items():
+            if key != "strava_segment_id":  # Don't update ID
+                setattr(existing, key, value)
+        db.commit()
+        db.refresh(existing)
+        return existing
+    
+    segment = SegmentDB(**segment_data)
+    db.add(segment)
+    db.commit()
+    db.refresh(segment)
+    return segment
+
+
+def get_segment_by_strava_id(db: Session, strava_segment_id: str) -> Optional[SegmentDB]:
+    """Get segment by Strava segment ID."""
+    return db.query(SegmentDB).filter(SegmentDB.strava_segment_id == str(strava_segment_id)).first()
+
+
+def get_user_segments(db: Session, user_id: int, limit: int = 50) -> List[SegmentDB]:
+    """Get segments that user has efforts on."""
+    segments = db.query(SegmentDB).join(SegmentEffortDB).filter(
+        SegmentEffortDB.user_id == user_id
+    ).distinct().limit(limit).all()
+    return segments
+
+
+# ===== SEGMENT EFFORT CRUD =====
+
+def upsert_segment_effort(
+    db: Session,
+    user_id: int,
+    activity_db_id: Optional[int],
+    strava_effort: dict,
+    segment_db_id: int
+) -> SegmentEffortDB:
+    """Insert or update segment effort."""
+    effort_id = str(strava_effort["id"])
+    existing = db.query(SegmentEffortDB).filter(SegmentEffortDB.strava_effort_id == effort_id).first()
+    
+    # Parse start date
+    start_date_str = strava_effort.get("start_date") or strava_effort.get("start_date_local")
+    if start_date_str:
+        start_date = datetime.fromisoformat(start_date_str.replace("Z", "+00:00"))
+    else:
+        start_date = datetime.utcnow()
+    
+    effort_data = {
+        "user_id": user_id,
+        "activity_id": activity_db_id,
+        "segment_id": segment_db_id,
+        "strava_effort_id": effort_id,
+        "start_date": start_date,
+        "elapsed_time_seconds": strava_effort.get("elapsed_time", 0),
+        "moving_time_seconds": strava_effort.get("moving_time"),
+        "average_heartrate": strava_effort.get("average_heartrate"),
+        "max_heartrate": strava_effort.get("max_heartrate"),
+        "average_watts": strava_effort.get("average_watts"),
+        "average_cadence": strava_effort.get("average_cadence"),
+        "pr_rank": strava_effort.get("pr_rank"),
+        "kom_rank": strava_effort.get("kom_rank"),
+        "is_pr": strava_effort.get("pr_rank") == 1,
+        "device_watts": strava_effort.get("device_watts", False),
+        "raw_data": strava_effort,
+    }
+    
+    if existing:
+        for key, value in effort_data.items():
+            if key != "strava_effort_id":
+                setattr(existing, key, value)
+        db.commit()
+        db.refresh(existing)
+        return existing
+    
+    effort = SegmentEffortDB(**effort_data)
+    db.add(effort)
+    db.commit()
+    db.refresh(effort)
+    return effort
+
+
+def get_user_segment_efforts(
+    db: Session,
+    user_id: int,
+    segment_id: Optional[int] = None,
+    limit: int = 100
+) -> List[SegmentEffortDB]:
+    """Get user's segment efforts, optionally filtered by segment."""
+    query = db.query(SegmentEffortDB).filter(SegmentEffortDB.user_id == user_id)
+    
+    if segment_id:
+        query = query.filter(SegmentEffortDB.segment_id == segment_id)
+    
+    return query.order_by(SegmentEffortDB.start_date.desc()).limit(limit).all()
+
+
+def get_user_prs_on_segments(db: Session, user_id: int, limit: int = 50) -> List[SegmentEffortDB]:
+    """Get user's personal records on segments."""
+    return db.query(SegmentEffortDB).filter(
+        and_(
+            SegmentEffortDB.user_id == user_id,
+            SegmentEffortDB.is_pr == True
+        )
+    ).order_by(SegmentEffortDB.start_date.desc()).limit(limit).all()
+
+
+# ===== PERSONAL RECORD CRUD =====
+
+def create_personal_record(
+    db: Session,
+    user_id: int,
+    activity_db_id: Optional[int],
+    sport_type: str,
+    distance_category: str,
+    distance_meters: float,
+    time_seconds: int,
+    achieved_date: datetime,
+    **kwargs
+) -> PersonalRecordDB:
+    """Create a new personal record."""
+    # Mark previous records as superseded
+    db.query(PersonalRecordDB).filter(
+        and_(
+            PersonalRecordDB.user_id == user_id,
+            PersonalRecordDB.sport_type == sport_type,
+            PersonalRecordDB.distance_category == distance_category,
+            PersonalRecordDB.is_current_pr == True
+        )
+    ).update({
+        "is_current_pr": False,
+        "superseded_at": datetime.utcnow()
+    })
+    
+    # Calculate pace/speed
+    pace_per_km = None
+    speed_kmh = None
+    if distance_meters > 0 and time_seconds > 0:
+        pace_per_km = time_seconds / (distance_meters / 1000)  # seconds per km
+        speed_kmh = (distance_meters / 1000) / (time_seconds / 3600)  # km/h
+    
+    pr = PersonalRecordDB(
+        user_id=user_id,
+        activity_id=activity_db_id,
+        sport_type=sport_type,
+        distance_category=distance_category,
+        distance_meters=distance_meters,
+        time_seconds=time_seconds,
+        pace_per_km=pace_per_km,
+        speed_kmh=speed_kmh,
+        achieved_date=achieved_date,
+        is_current_pr=True,
+        **kwargs
+    )
+    
+    db.add(pr)
+    db.commit()
+    db.refresh(pr)
+    return pr
+
+
+def get_current_personal_records(db: Session, user_id: int, sport_type: Optional[str] = None) -> List[PersonalRecordDB]:
+    """Get user's current personal records."""
+    query = db.query(PersonalRecordDB).filter(
+        and_(
+            PersonalRecordDB.user_id == user_id,
+            PersonalRecordDB.is_current_pr == True
+        )
+    )
+    
+    if sport_type:
+        query = query.filter(PersonalRecordDB.sport_type == sport_type)
+    
+    return query.order_by(PersonalRecordDB.achieved_date.desc()).all()
+
+
+def get_pr_history(
+    db: Session,
+    user_id: int,
+    sport_type: str,
+    distance_category: str
+) -> List[PersonalRecordDB]:
+    """Get history of personal records for a specific distance."""
+    return db.query(PersonalRecordDB).filter(
+        and_(
+            PersonalRecordDB.user_id == user_id,
+            PersonalRecordDB.sport_type == sport_type,
+            PersonalRecordDB.distance_category == distance_category
+        )
+    ).order_by(PersonalRecordDB.achieved_date.desc()).all()
+
+
+# ===== INJURY RISK CRUD =====
+
+def create_injury_risk(
+    db: Session,
+    user_id: int,
+    risk_level: str,
+    risk_type: str,
+    title: str,
+    description: str,
+    recommendation: str,
+    trigger_metrics: dict,
+    detected_date: date
+) -> InjuryRiskDB:
+    """Create injury risk warning."""
+    risk = InjuryRiskDB(
+        user_id=user_id,
+        risk_level=risk_level,
+        risk_type=risk_type,
+        title=title,
+        description=description,
+        recommendation=recommendation,
+        trigger_metrics=trigger_metrics,
+        detected_date=detected_date
+    )
+    
+    db.add(risk)
+    db.commit()
+    db.refresh(risk)
+    return risk
+
+
+def get_active_injury_risks(db: Session, user_id: int) -> List[InjuryRiskDB]:
+    """Get unresolved injury risk warnings."""
+    return db.query(InjuryRiskDB).filter(
+        and_(
+            InjuryRiskDB.user_id == user_id,
+            InjuryRiskDB.resolved == False
+        )
+    ).order_by(InjuryRiskDB.detected_date.desc()).all()
+
+
+def acknowledge_injury_risk(db: Session, risk_id: int) -> InjuryRiskDB:
+    """Mark injury risk as acknowledged."""
+    risk = db.query(InjuryRiskDB).filter(InjuryRiskDB.id == risk_id).first()
+    if risk:
+        risk.acknowledged = True
+        risk.acknowledged_at = datetime.utcnow()
+        db.commit()
+        db.refresh(risk)
+    return risk
+
+
+def resolve_injury_risk(db: Session, risk_id: int) -> InjuryRiskDB:
+    """Mark injury risk as resolved."""
+    risk = db.query(InjuryRiskDB).filter(InjuryRiskDB.id == risk_id).first()
+    if risk:
+        risk.resolved = True
+        risk.resolved_at = datetime.utcnow()
+        db.commit()
+        db.refresh(risk)
+    return risk
