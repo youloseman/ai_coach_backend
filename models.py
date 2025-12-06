@@ -300,8 +300,8 @@ class SegmentEffortDB(Base):
     synced_at = Column(DateTime, default=func.now())
     
     # Relationships
-    user = relationship("User")
-    activity = relationship("ActivityDB")
+    user = relationship("User", back_populates="segment_efforts", overlaps="user_efforts")
+    activity = relationship("ActivityDB", back_populates="segment_efforts")
     segment = relationship("SegmentDB", back_populates="efforts")
 
 
@@ -340,8 +340,8 @@ class PersonalRecordDB(Base):
     superseded_at = Column(DateTime, nullable=True)  # When this PR was beaten
     
     # Relationships
-    user = relationship("User")
-    activity = relationship("ActivityDB")
+    user = relationship("User", back_populates="personal_records", overlaps="user_records")
+    activity = relationship("ActivityDB", back_populates="personal_records")
 
 
 class InjuryRiskDB(Base):
@@ -375,4 +375,4 @@ class InjuryRiskDB(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # Relationships
-    user = relationship("User")
+    user = relationship("User", back_populates="injury_risks", overlaps="user_risks")

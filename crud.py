@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List
 
 from models import (
@@ -53,7 +53,7 @@ def create_user(db: Session, user: UserCreate) -> User:
 
 def update_user_last_login(db: Session, user_id: int):
     """Update last login timestamp"""
-    db.query(User).filter(User.id == user_id).update({"last_login_at": datetime.utcnow()})
+    db.query(User).filter(User.id == user_id).update({"last_login_at": datetime.now(timezone.utc)})
     db.commit()
 
 
@@ -299,7 +299,7 @@ def upsert_segment_effort(
     if start_date_str:
         start_date = datetime.fromisoformat(start_date_str.replace("Z", "+00:00"))
     else:
-        start_date = datetime.utcnow()
+        start_date = datetime.now(timezone.utc)
     
     effort_data = {
         "user_id": user_id,
@@ -384,7 +384,7 @@ def create_personal_record(
         )
     ).update({
         "is_current_pr": False,
-        "superseded_at": datetime.utcnow()
+        "superseded_at": datetime.now(timezone.utc)
     })
     
     # Calculate pace/speed
@@ -491,7 +491,7 @@ def acknowledge_injury_risk(db: Session, risk_id: int) -> InjuryRiskDB:
     risk = db.query(InjuryRiskDB).filter(InjuryRiskDB.id == risk_id).first()
     if risk:
         risk.acknowledged = True
-        risk.acknowledged_at = datetime.utcnow()
+        risk.acknowledged_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(risk)
     return risk
@@ -502,7 +502,7 @@ def resolve_injury_risk(db: Session, risk_id: int) -> InjuryRiskDB:
     risk = db.query(InjuryRiskDB).filter(InjuryRiskDB.id == risk_id).first()
     if risk:
         risk.resolved = True
-        risk.resolved_at = datetime.utcnow()
+        risk.resolved_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(risk)
     return risk
