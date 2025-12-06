@@ -1013,6 +1013,8 @@ async def coach_weekly_report_email(req: WeeklyReportEmailRequest):
         </div>
         """
 
+    dashboard_url = f"{FRONTEND_BASE_URL.rstrip('/')}/dashboard"
+
     html_body = f"""
     <html>
       <head>
