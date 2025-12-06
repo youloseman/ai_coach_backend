@@ -8,6 +8,11 @@ import models
 from schemas import ProfileUpdate, ProfileResponse, GoalCreate, GoalResponse
 from auth import get_current_user
 import crud
+from cache import (
+    get_cached_user_profile,
+    cache_user_profile,
+    TTL_USER_PROFILE,
+)
 
 
 router = APIRouter()
@@ -21,7 +26,13 @@ async def get_profile(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get current user's athlete profile."""
+    """Get current user's athlete profile. Supports caching for performance."""
+    # Check cache first
+    cached_profile = get_cached_user_profile(current_user.id)
+    if cached_profile is not None:
+        return ProfileResponse(**cached_profile)
+    
+    # Cache miss - fetch from DB
     profile = crud.get_user_profile(db, current_user.id)
 
     if not profile:
@@ -31,7 +42,12 @@ async def get_profile(
         db.commit()
         db.refresh(profile)
 
-    return ProfileResponse.model_validate(profile)
+    profile_response = ProfileResponse.model_validate(profile)
+    
+    # Cache the result
+    cache_user_profile(current_user.id, profile_response.model_dump())
+    
+    return profile_response
 
 
 @router.patch("/profile", response_model=ProfileResponse)
@@ -40,9 +56,17 @@ async def update_profile(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Update current user's athlete profile."""
+    """Update current user's athlete profile. Invalidates cache."""
+    from cache import cache
+    
     profile = crud.update_user_profile(db, current_user.id, profile_update)
-    return ProfileResponse.model_validate(profile)
+    profile_response = ProfileResponse.model_validate(profile)
+    
+    # Invalidate and update cache
+    cache.delete(f"user:profile:{current_user.id}")
+    cache_user_profile(current_user.id, profile_response.model_dump())
+    
+    return profile_response
 
 
 # ===== GOALS ENDPOINTS =====

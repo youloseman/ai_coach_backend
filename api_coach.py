@@ -13,6 +13,14 @@ from strava_client import (
     fetch_activities_last_n_weeks,
     fetch_recent_activities_for_coach,
 )
+from cache import (
+    get_cached_training_zones,
+    cache_training_zones,
+    get_cached_user_profile,
+    cache_user_profile,
+    TTL_TRAINING_ZONES,
+    TTL_USER_PROFILE,
+)
 from utils import (
     normalize_sport,
     parse_activity_date,
@@ -243,11 +251,23 @@ def _analyze_activities_for_profile(activities: list[dict]) -> dict:
 
 
 @router.get("/coach/profile", response_model=AthleteProfile)
-async def get_athlete_profile():
+async def get_athlete_profile(user_id: int = 0):
     """
     Вернуть текущий профиль атлета (если не задан — дефолтный).
+    Поддерживает кеширование для оптимизации производительности.
     """
-    return load_athlete_profile()
+    # Check cache first (user_id=0 for global profile)
+    cached_profile = get_cached_user_profile(user_id)
+    if cached_profile is not None:
+        return AthleteProfile(**cached_profile)
+    
+    # Cache miss - load from file/DB
+    profile = load_athlete_profile()
+    
+    # Cache the result
+    cache_user_profile(user_id, profile.model_dump())
+    
+    return profile
 
 
 @router.post("/coach/profile", response_model=AthleteProfile)
@@ -1375,18 +1395,30 @@ async def calculate_zones_manual(input_data: ManualZonesInput):
 
 
 @router.get("/coach/zones")
-async def get_training_zones():
+async def get_training_zones(user_id: int = 0):
     """
     Получить текущие тренировочные зоны из профиля.
+    Поддерживает кеширование для оптимизации производительности.
     """
+    # Check cache first (user_id=0 for global profile)
+    cached_zones = get_cached_training_zones(user_id)
+    if cached_zones is not None:
+        return cached_zones
+    
+    # Cache miss - load from profile
     profile = load_athlete_profile()
-
-    return {
+    
+    zones_data = {
         "zones_last_updated": profile.zones_last_updated,
         "run": profile.training_zones_run,
         "bike": profile.training_zones_bike,
         "swim": profile.training_zones_swim,
     }
+    
+    # Cache the result
+    cache_training_zones(user_id, zones_data)
+    
+    return zones_data
 
 
 

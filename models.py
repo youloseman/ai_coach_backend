@@ -44,6 +44,8 @@ class User(Base):
     segment_efforts = relationship("SegmentEffortDB", backref="user_efforts")
     personal_records = relationship("PersonalRecordDB", backref="user_records")
     injury_risks = relationship("InjuryRiskDB", backref="user_risks")
+    nutrition_targets = relationship("NutritionTargetDB", back_populates="user")
+    nutrition_plans = relationship("NutritionPlanDB", back_populates="user")
 
 
 class AthleteProfileDB(Base):
@@ -376,3 +378,69 @@ class InjuryRiskDB(Base):
     
     # Relationships
     user = relationship("User", back_populates="injury_risks", overlaps="user_risks")
+
+
+class NutritionTargetDB(Base):
+    """Daily nutrition targets for users"""
+    __tablename__ = "nutrition_targets"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    # Target calories and macros
+    daily_calories = Column(Float, nullable=True)  # kcal
+    daily_carbs_grams = Column(Float, nullable=True)  # grams
+    daily_protein_grams = Column(Float, nullable=True)  # grams
+    daily_fat_grams = Column(Float, nullable=True)  # grams
+    
+    # Activity level multipliers
+    activity_level = Column(String, nullable=True)  # "sedentary", "light", "moderate", "active", "very_active"
+    training_days_per_week = Column(Integer, nullable=True, default=3)
+    
+    # Goals
+    goal_type = Column(String, nullable=True)  # "maintain", "lose_weight", "gain_muscle", "performance"
+    target_weight_kg = Column(Float, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User", backref="nutrition_targets")
+
+
+class NutritionPlanDB(Base):
+    """Race day and recovery nutrition plans"""
+    __tablename__ = "nutrition_plans"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    # Plan type
+    plan_type = Column(String, nullable=False, index=True)  # "race_day", "recovery", "training_day", "taper"
+    race_type = Column(String, nullable=True)  # "5K", "10K", "HM", "Marathon", "Ironman", etc.
+    race_duration_hours = Column(Float, nullable=True)  # Expected race duration
+    
+    # Pre-race nutrition (timing in hours before race)
+    pre_race_meals = Column(JSON, nullable=True)  # List of meals with timing and macros
+    
+    # During race nutrition (for long races)
+    during_race_fueling = Column(JSON, nullable=True)  # List of fueling strategies
+    # Format: [{"time_minutes": 0, "type": "gel", "carbs_grams": 25, "notes": "..."}, ...]
+    
+    # Post-race recovery
+    recovery_nutrition = Column(JSON, nullable=True)  # Recovery meal plan
+    
+    # Daily nutrition breakdown
+    daily_meals = Column(JSON, nullable=True)  # Full day meal plan with macros
+    
+    # Notes and recommendations
+    notes = Column(Text, nullable=True)
+    recommendations = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User", backref="nutrition_plans")

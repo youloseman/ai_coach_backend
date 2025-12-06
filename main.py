@@ -43,6 +43,7 @@ from api_auth import router as auth_router
 from api_user import router as user_router
 from api_coach import router as coach_router
 from api_segments import router as segments_router
+from api_nutrition import router as nutrition_router
 from segment_sync import sync_segment_efforts_for_activity, detect_personal_records
 
 
@@ -69,6 +70,7 @@ app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(coach_router)
 app.include_router(segments_router)
+app.include_router(nutrition_router, prefix="/nutrition", tags=["nutrition"])
 
 
 # ===== ANALYTICS =====

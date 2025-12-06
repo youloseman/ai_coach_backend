@@ -1,6 +1,5 @@
 import json
 import time
-from typing import List
 
 import httpx
 from fastapi import HTTPException
@@ -11,6 +10,10 @@ from sqlalchemy.orm import Session
 from strava_auth import get_user_tokens
 from config import STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, TOKENS_FILE, logger
 from state_store import load_state, save_state
+from cache import (
+    get_cached_strava_activities,
+    cache_strava_activities,
+)
 
 STRAVA_TOKENS_STATE_KEY = "strava_tokens"
 
@@ -42,13 +45,24 @@ async def fetch_activities_for_user(
 async def fetch_activities_last_n_weeks_for_user(
     user_id: int,
     db: Session,
-    weeks: int = 12
+    weeks: int = 12,
+    use_cache: bool = True
 ) -> list[dict]:
     """
     Загрузить активности за последние N недель для пользователя.
+    Поддерживает кеширование для оптимизации производительности.
     """
     import datetime as dt
     
+    # Check cache first
+    if use_cache:
+        cached = get_cached_strava_activities(user_id, weeks)
+        if cached is not None:
+            logger.info("strava_activities_from_cache", user_id=user_id, weeks=weeks, count=len(cached))
+            return cached
+    
+    # Cache miss - fetch from Strava
+    logger.info("strava_activities_fetch", user_id=user_id, weeks=weeks)
     after_timestamp = int((dt.datetime.now() - dt.timedelta(weeks=weeks)).timestamp())
     
     tokens = await get_user_tokens(user_id, db)
@@ -78,6 +92,11 @@ async def fetch_activities_last_n_weeks_for_user(
             # Safety limit
             if page > 10:
                 break
+    
+    # Cache the results
+    if use_cache and all_activities:
+        cache_strava_activities(user_id, weeks, all_activities)
+        logger.info("strava_activities_cached", user_id=user_id, weeks=weeks, count=len(all_activities))
     
     return all_activities
 
@@ -328,11 +347,20 @@ async def fetch_recent_activities_for_coach(limit: int = 80) -> list[dict]:
     retry=retry_if_exception_type(httpx.HTTPError),
     reraise=True,
 )
-async def fetch_activities_last_n_weeks(weeks: int = 8) -> list[dict]:
+async def fetch_activities_last_n_weeks(weeks: int = 8, use_cache: bool = True) -> list[dict]:
     """
     Тянем активности за последние N недель (по дате начала).
     Автоматически повторяет запрос до 3 раз при ошибках сети.
+    Legacy function - uses global Strava tokens from file.
     """
+    # Check cache first (using "0" as user_id for legacy support)
+    if use_cache:
+        cached = get_cached_strava_activities(user_id=0, weeks=weeks)
+        if cached is not None:
+            logger.info("strava_activities_from_cache_legacy", weeks=weeks, count=len(cached))
+            return cached
+    
+    logger.info("strava_activities_fetch_legacy", weeks=weeks)
     access_token = await get_valid_access_token()
     url = "https://www.strava.com/api/v3/athlete/activities"
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -386,6 +414,11 @@ async def fetch_activities_last_n_weeks(weeks: int = 8) -> list[dict]:
                 break  # дальше активностей нет
 
             page += 1
+    
+    # Cache the results
+    if use_cache and activities:
+        cache_strava_activities(user_id=0, weeks=weeks, activities=activities)
+        logger.info("strava_activities_cached_legacy", weeks=weeks, count=len(activities))
 
     return activities
 
