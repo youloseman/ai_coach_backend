@@ -394,11 +394,11 @@ class NutritionTargetDB(Base):
     daily_fat_grams = Column(Float, nullable=True)  # grams
     
     # Activity level multipliers
-    activity_level = Column(String, nullable=True)  # "sedentary", "light", "moderate", "active", "very_active"
+    activity_level = Column(String, nullable=True)
     training_days_per_week = Column(Integer, nullable=True, default=3)
     
     # Goals
-    goal_type = Column(String, nullable=True)  # "maintain", "lose_weight", "gain_muscle", "performance"
+    goal_type = Column(String, nullable=True)
     target_weight_kg = Column(Float, nullable=True)
     
     # Timestamps
@@ -406,7 +406,7 @@ class NutritionTargetDB(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # Relationships
-    user = relationship("User", backref="nutrition_targets")
+    user = relationship("User", back_populates="nutrition_targets")
 
 
 class NutritionPlanDB(Base):
@@ -417,22 +417,21 @@ class NutritionPlanDB(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     
     # Plan type
-    plan_type = Column(String, nullable=False, index=True)  # "race_day", "recovery", "training_day", "taper"
-    race_type = Column(String, nullable=True)  # "5K", "10K", "HM", "Marathon", "Ironman", etc.
-    race_duration_hours = Column(Float, nullable=True)  # Expected race duration
+    plan_type = Column(String, nullable=False, index=True)
+    race_type = Column(String, nullable=True)
+    race_duration_hours = Column(Float, nullable=True)
     
-    # Pre-race nutrition (timing in hours before race)
-    pre_race_meals = Column(JSON, nullable=True)  # List of meals with timing and macros
+    # Pre-race nutrition
+    pre_race_meals = Column(JSON, nullable=True)
     
-    # During race nutrition (for long races)
-    during_race_fueling = Column(JSON, nullable=True)  # List of fueling strategies
-    # Format: [{"time_minutes": 0, "type": "gel", "carbs_grams": 25, "notes": "..."}, ...]
+    # During race nutrition
+    during_race_fueling = Column(JSON, nullable=True)
     
     # Post-race recovery
-    recovery_nutrition = Column(JSON, nullable=True)  # Recovery meal plan
+    recovery_nutrition = Column(JSON, nullable=True)
     
     # Daily nutrition breakdown
-    daily_meals = Column(JSON, nullable=True)  # Full day meal plan with macros
+    daily_meals = Column(JSON, nullable=True)
     
     # Notes and recommendations
     notes = Column(Text, nullable=True)
@@ -443,4 +442,4 @@ class NutritionPlanDB(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # Relationships
-    user = relationship("User", backref="nutrition_plans")
+    user = relationship("User", back_populates="nutrition_plans")
