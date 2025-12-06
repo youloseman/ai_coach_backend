@@ -15,7 +15,8 @@ class RedisCache:
     """Redis cache manager with connection pooling"""
     
     def __init__(self):
-        self.redis_url = os.getenv("REDIS_URL")
+        # Try different environment variable formats that Railway might use
+        self.redis_url = self._get_redis_url()
         self.enabled = bool(self.redis_url)
         
         if self.enabled:
@@ -37,8 +38,48 @@ class RedisCache:
                 self.enabled = False
                 self.client = None
         else:
-            logger.info("redis_disabled", message="REDIS_URL not set, caching disabled")
+            # Log available Redis-related env vars for debugging (without exposing secrets)
+            redis_env_vars = {
+                "REDIS_URL": "set" if os.getenv("REDIS_URL") else "not set",
+                "REDIS_HOST": "set" if os.getenv("REDIS_HOST") else "not set",
+                "REDIS_PORT": os.getenv("REDIS_PORT", "not set"),
+                "REDIS_PASSWORD": "set" if os.getenv("REDIS_PASSWORD") else "not set",
+            }
+            logger.info(
+                "redis_disabled",
+                message="Redis URL not found in environment variables, caching disabled",
+                env_vars=redis_env_vars
+            )
             self.client = None
+    
+    def _get_redis_url(self) -> Optional[str]:
+        """
+        Get Redis URL from environment variables.
+        Supports multiple formats that Railway and other platforms might use.
+        """
+        # Try REDIS_URL first (standard format)
+        redis_url = os.getenv("REDIS_URL")
+        if redis_url:
+            return redis_url
+        
+        # Try Railway-specific format: REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+        redis_host = os.getenv("REDIS_HOST")
+        redis_port = os.getenv("REDIS_PORT", "6379")
+        redis_password = os.getenv("REDIS_PASSWORD")
+        
+        if redis_host:
+            # Build Redis URL from components
+            if redis_password:
+                return f"redis://:{redis_password}@{redis_host}:{redis_port}"
+            else:
+                return f"redis://{redis_host}:{redis_port}"
+        
+        # Try other common formats
+        redis_url = os.getenv("REDISCLOUD_URL") or os.getenv("REDISTOGO_URL")
+        if redis_url:
+            return redis_url
+        
+        return None
     
     def get(self, key: str) -> Optional[Any]:
         """Get value from cache"""

@@ -45,12 +45,20 @@ from api_coach import router as coach_router
 from api_segments import router as segments_router
 from api_nutrition import router as nutrition_router
 from segment_sync import sync_segment_efforts_for_activity, detect_personal_records
+# Initialize cache on startup (for logging and connection testing)
+from cache import cache
 
 
 app = FastAPI(title="AI Triathlon Coach API")
 
 # Initialize database
 init_db()
+
+# Log cache status on startup
+if cache.enabled:
+    logger.info("cache_initialized", status="enabled")
+else:
+    logger.info("cache_initialized", status="disabled")
 
 # CORS middleware
 # Разрешаем запросы с локального фронта и прод-фронта (Railway).
