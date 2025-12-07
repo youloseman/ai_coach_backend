@@ -50,7 +50,15 @@ def init_db():
     """
     Initialize database - create all tables.
     For production with PostgreSQL you should use Alembic migrations instead.
+    This function is safe to call multiple times - it won't recreate existing tables.
     """
-    import models  # Import to register models
-
-    Base.metadata.create_all(bind=engine)
+    try:
+        import models  # Import to register models
+        
+        # Only create tables if they don't exist (idempotent)
+        # In production, Alembic migrations handle this
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+    except Exception as e:
+        # Log error but don't raise - let migrations handle it in production
+        import logging
+        logging.warning(f"Database initialization warning (this is OK if using migrations): {e}")

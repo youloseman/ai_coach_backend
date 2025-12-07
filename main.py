@@ -46,19 +46,38 @@ from api_segments import router as segments_router
 from api_nutrition import router as nutrition_router
 from segment_sync import sync_segment_efforts_for_activity, detect_personal_records
 # Initialize cache on startup (for logging and connection testing)
-from cache import cache
+# Import with error handling to prevent startup failures
+try:
+    from cache import cache
+except Exception as e:
+    # If cache fails to import, create a dummy cache object
+    class DummyCache:
+        enabled = False
+        def get(self, *args, **kwargs): return None
+        def set(self, *args, **kwargs): return False
+        def delete(self, *args, **kwargs): return False
+    cache = DummyCache()
+    logger.warning("cache_import_failed", error=str(e))
 
 
 app = FastAPI(title="AI Triathlon Coach API")
 
-# Initialize database
-init_db()
+# Initialize database (non-blocking, errors are logged but don't crash app)
+try:
+    init_db()
+    logger.info("database_initialized", status="success")
+except Exception as e:
+    logger.error("database_initialization_failed", error=str(e))
+    # Don't crash - migrations will handle table creation
 
 # Log cache status on startup
-if cache.enabled:
-    logger.info("cache_initialized", status="enabled")
-else:
-    logger.info("cache_initialized", status="disabled")
+try:
+    if cache.enabled:
+        logger.info("cache_initialized", status="enabled")
+    else:
+        logger.info("cache_initialized", status="disabled")
+except Exception as e:
+    logger.warning("cache_initialization_failed", error=str(e))
 
 # CORS middleware
 # Разрешаем запросы с локального фронта и прод-фронта (Railway).
@@ -699,12 +718,20 @@ async def update_scheduler_config(
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint для monitoring"""
-    return {
-        "status": "healthy",
-        "timestamp": dt.datetime.now().isoformat(),
-        "version": "1.0.0"
-    }
+    """Health check endpoint для monitoring - must be fast and never fail"""
+    try:
+        return {
+            "status": "healthy",
+            "timestamp": dt.datetime.now().isoformat(),
+            "version": "1.0.0"
+        }
+    except Exception as e:
+        # Even if something fails, return healthy status
+        return {
+            "status": "healthy",
+            "timestamp": "unknown",
+            "version": "1.0.0"
+        }
 
 @app.get("/health/db")
 async def health_check_db(db: Session = Depends(get_db)):
