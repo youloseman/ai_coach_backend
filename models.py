@@ -1,11 +1,9 @@
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, 
-    Text, JSON, ForeignKey, Date, Enum as SQLEnum
+    Text, JSON, ForeignKey, Date
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from datetime import datetime
-import enum
 
 from database import Base
 
@@ -44,8 +42,8 @@ class User(Base):
     segment_efforts = relationship("SegmentEffortDB", backref="user_efforts")
     personal_records = relationship("PersonalRecordDB", backref="user_records")
     injury_risks = relationship("InjuryRiskDB", backref="user_risks")
-    nutrition_targets = relationship("NutritionTargetDB", back_populates="user")
-    nutrition_plans = relationship("NutritionPlanDB", back_populates="user")
+    nutrition_targets = relationship("NutritionTargetDB", backref="user")
+    nutrition_plans = relationship("NutritionPlanDB", backref="user")
 
 
 class AthleteProfileDB(Base):
@@ -406,7 +404,7 @@ class NutritionTargetDB(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # Relationships
-    user = relationship("User", back_populates="nutrition_targets")
+    # user relationship is created via backref in User model
 
 
 class NutritionPlanDB(Base):
@@ -442,4 +440,4 @@ class NutritionPlanDB(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # Relationships
-    user = relationship("User", back_populates="nutrition_plans")
+    # user relationship is created via backref in User model
