@@ -57,8 +57,10 @@ def init_db():
         
         # Only create tables if they don't exist (idempotent)
         # In production, Alembic migrations handle this
+        # Use checkfirst=True to avoid errors if tables already exist
         Base.metadata.create_all(bind=engine, checkfirst=True)
     except Exception as e:
         # Log error but don't raise - let migrations handle it in production
         import logging
         logging.warning(f"Database initialization warning (this is OK if using migrations): {e}")
+        # Don't fail startup if DB init fails - migrations will handle it

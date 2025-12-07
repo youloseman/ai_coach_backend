@@ -63,12 +63,19 @@ except Exception as e:
 app = FastAPI(title="AI Triathlon Coach API")
 
 # Initialize database (non-blocking, errors are logged but don't crash app)
-try:
-    init_db()
-    logger.info("database_initialized", status="success")
-except Exception as e:
-    logger.error("database_initialization_failed", error=str(e))
-    # Don't crash - migrations will handle table creation
+# This runs in background to not block startup
+import threading
+def init_db_async():
+    try:
+        init_db()
+        logger.info("database_initialized", status="success")
+    except Exception as e:
+        logger.error("database_initialization_failed", error=str(e))
+        # Don't crash - migrations will handle table creation
+
+# Start DB init in background thread to not block startup
+db_init_thread = threading.Thread(target=init_db_async, daemon=True)
+db_init_thread.start()
 
 # Log cache status on startup
 try:
