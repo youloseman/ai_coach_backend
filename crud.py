@@ -57,6 +57,19 @@ def update_user_last_login(db: Session, user_id: int):
     db.commit()
 
 
+def verify_user_email(db: Session, user_id: int) -> User:
+    """Mark user email as verified"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise ValueError("User not found")
+    
+    user.is_verified = True
+    user.email_verified_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 # ===== PROFILE CRUD =====
 
 def get_user_profile(db: Session, user_id: int) -> Optional[AthleteProfileDB]:

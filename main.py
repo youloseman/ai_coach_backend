@@ -6,6 +6,11 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+# Rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 # NEW: Database imports
 from database import init_db, get_db
 
@@ -64,6 +69,11 @@ except Exception as e:
 
 app = FastAPI(title="AI Triathlon Coach API")
 
+# Rate limiting setup
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Initialize database (non-blocking, errors are logged but don't crash app)
 # This runs in background to not block startup
 def init_db_async():
@@ -111,7 +121,8 @@ app.include_router(nutrition_router, prefix="/nutrition", tags=["nutrition"])
 # ===== ANALYTICS =====
 
 @app.get("/analytics/training_load")
-async def get_training_load_analytics(weeks: int = 12):
+@limiter.limit("30/minute")
+async def get_training_load_analytics(request: Request, weeks: int = 12):
     """
     Получить комплексный анализ тренировочной нагрузки.
     

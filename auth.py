@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import os
+import secrets
 from dotenv import load_dotenv
 
 from database import get_db
@@ -24,6 +25,7 @@ if not SECRET_KEY:
     SECRET_KEY = "dev-insecure-secret-change-me"
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))
+EMAIL_VERIFICATION_EXPIRE_HOURS = int(os.getenv("EMAIL_VERIFICATION_EXPIRE_HOURS", "24"))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -123,3 +125,26 @@ async def get_current_active_user(
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+
+def create_email_verification_token(user_id: int, email: str) -> str:
+    """Create email verification token (expires in 24 hours by default)"""
+    expire = datetime.utcnow() + timedelta(hours=EMAIL_VERIFICATION_EXPIRE_HOURS)
+    to_encode = {
+        "sub": user_id,
+        "email": email,
+        "type": "email_verification",
+        "exp": expire
+    }
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def verify_email_token(token: str) -> Optional[dict]:
+    """Verify email verification token and return payload"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "email_verification":
+            return None
+        return payload
+    except JWTError:
+        return None
