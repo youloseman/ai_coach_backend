@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { isAuthenticated, getAuthToken } from '@/lib/auth';
+import { getAuthToken } from '@/lib/auth';
 import { goalsAPI } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import type { Goal, GoalCreate } from '@/types';
@@ -55,14 +55,14 @@ export default function GoalsPage() {
       return;
     }
 
-    // Clear stale state
-    setGoals([]);
-    setError(null);
-    setStatus('idle');
-
     let isCancelled = false;
 
     const loadGoals = async () => {
+      // Clear stale state before loading
+      setGoals([]);
+      setError(null);
+      setStatus('idle');
+      
       try {
         setStatus('loading');
         setError(null);

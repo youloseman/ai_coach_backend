@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { isAuthenticated, getAuthToken } from '@/lib/auth';
+import { getAuthToken } from '@/lib/auth';
 import { profileAPI, goalsAPI } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import type { AthleteProfile, GoalCreate } from '@/types';
@@ -47,14 +47,14 @@ export default function OnboardingPage() {
       return;
     }
 
-    // Clear stale state
-    setProfile(null);
-    setError(null);
-    setStatus('idle');
-
     let cancelled = false;
 
     const init = async () => {
+      // Clear stale state before loading
+      setProfile(null);
+      setError(null);
+      setStatus('idle');
+      
       try {
         setStatus('loading');
         setError(null);

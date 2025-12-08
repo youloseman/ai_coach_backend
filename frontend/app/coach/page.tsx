@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { isAuthenticated, getAuthToken } from '@/lib/auth';
+import { getAuthToken } from '@/lib/auth';
 import { coachAPI, stravaAPI, API_URL } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import type { CoachProfile, CoachLevel, StravaStatus } from '@/types';
@@ -32,15 +32,15 @@ export default function CoachProfilePage() {
       return;
     }
 
-    // Clear stale state
-    setCoachProfile(null);
-    setStravaStatus(null);
-    setError(null);
-    setStatus('idle');
-
     let cancelled = false;
 
     const loadProfileAndStrava = async () => {
+      // Clear stale state before loading
+      setCoachProfile(null);
+      setStravaStatus(null);
+      setError(null);
+      setStatus('idle');
+      
       try {
         setStatus('loading');
         setError(null);

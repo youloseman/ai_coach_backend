@@ -1,7 +1,7 @@
 // app/dashboard/page.tsx
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { isAuthenticated, logout, getAuthToken } from '@/lib/auth';
@@ -205,17 +205,17 @@ export default function DashboardPage() {
       return;
     }
 
-    // Clear any stale state from previous user
-    setProfile(null);
-    setPrimaryGoal(null);
-    setAllGoals([]);
-    setZones(null);
-    setError(null);
-    setStatus('idle');
-
     let isCancelled = false;
 
     const loadData = async () => {
+      // Clear any stale state from previous user before loading
+      setProfile(null);
+      setPrimaryGoal(null);
+      setAllGoals([]);
+      setZones(null);
+      setError(null);
+      setStatus('idle');
+      
       try {
         setStatus('loading');
         setError(null);

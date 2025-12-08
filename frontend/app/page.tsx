@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { isAuthenticated, getAuthToken } from '@/lib/auth';
+import { getAuthToken } from '@/lib/auth';
 import { goalsAPI } from '@/lib/api';
 
 type Status = 'idle' | 'checking' | 'done';
