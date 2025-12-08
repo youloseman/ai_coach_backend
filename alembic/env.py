@@ -4,13 +4,16 @@ from sqlalchemy import pool
 from alembic import context
 import os
 import sys
+from dotenv import load_dotenv
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-# Import your models
-from database import Base
-from models import User, AthleteProfileDB, GoalDB, WeeklyPlanDB, ActivityDB, TrainingLoadDB
+# Import your models (import all to register them with Base.metadata)
+import models  # noqa: F401, E402
+
+# Import Base after models are registered
+from database import Base  # noqa: E402
 
 # this is the Alembic Config object
 config = context.config
@@ -23,7 +26,6 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Get DATABASE_URL from environment
-from dotenv import load_dotenv
 load_dotenv()
 database_url = os.getenv("DATABASE_URL")
 

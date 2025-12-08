@@ -45,6 +45,8 @@ from api_coach import router as coach_router
 from api_segments import router as segments_router
 from api_nutrition import router as nutrition_router
 from segment_sync import sync_segment_efforts_for_activity, detect_personal_records
+import threading
+
 # Initialize cache on startup (for logging and connection testing)
 # Import with error handling to prevent startup failures
 try:
@@ -64,7 +66,6 @@ app = FastAPI(title="AI Triathlon Coach API")
 
 # Initialize database (non-blocking, errors are logged but don't crash app)
 # This runs in background to not block startup
-import threading
 def init_db_async():
     try:
         init_db()

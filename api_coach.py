@@ -2,8 +2,6 @@ import datetime as dt
 from typing import Optional, List
 from pathlib import Path
 
-import datetime as dt
-
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
