@@ -99,16 +99,36 @@ except Exception as e:
 
 # CORS middleware
 # Разрешаем запросы с локального фронта и прод-фронта (Railway).
+import os
+import re
+
+FRONTEND_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+FRONTEND_RAILWAY_URL = os.getenv("FRONTEND_RAILWAY_URL", "")
+
+# Allow all Railway frontend URLs (they can change)
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:8080",  # Railway local
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:8080",
+]
+
+if FRONTEND_URL:
+    allowed_origins.append(FRONTEND_URL)
+if FRONTEND_RAILWAY_URL:
+    allowed_origins.append(FRONTEND_RAILWAY_URL)
+
+# Allow any Railway app URL (wildcard pattern)
+# Railway URLs follow pattern: https://<service-name>-<hash>.up.railway.app
+allowed_origins.append("https://*.up.railway.app")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # локальный Next.js
-        "https://frontend-production-8c08.up.railway.app",  # прод-фронтенд на Railway
-        "https://aicoachbackend-production.up.railway.app",  # сам бекенд (на всякий)
-    ],
+    allow_origins=["*"],  # Allow all origins for now (can restrict later)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 app.include_router(auth_router)

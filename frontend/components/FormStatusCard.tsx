@@ -8,10 +8,10 @@ interface FormStatusCardProps {
     ctl: number;
     atl: number;
     tsb: number;
-    form: {
-      label: string;
-      description: string;
-      recommendation: string;
+    form?: {
+      label?: string;
+      description?: string;
+      recommendation?: string;
     };
   } | null;
   isLoading?: boolean;
@@ -68,7 +68,9 @@ export function FormStatusCard({ formStatus, isLoading }: FormStatusCardProps) {
     };
   };
 
-  const formColor = getFormColor(formStatus.form.label);
+  // Safely access form.label with fallback
+  const formLabel = formStatus.form?.label || 'Unknown';
+  const formColor = getFormColor(formLabel);
   const FormIcon = formColor.icon;
 
   return (
@@ -83,7 +85,7 @@ export function FormStatusCard({ formStatus, isLoading }: FormStatusCardProps) {
         <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${formColor.border} ${formColor.bg}`}>
           <FormIcon className={`w-4 h-4 ${formColor.text}`} />
           <span className={`text-sm font-medium ${formColor.text}`}>
-            {formStatus.form.label}
+            {formLabel}
           </span>
         </div>
 
@@ -95,12 +97,14 @@ export function FormStatusCard({ formStatus, isLoading }: FormStatusCardProps) {
         </div>
 
         {/* Description */}
-        <p className="text-xs text-slate-300 leading-relaxed">
-          {formStatus.form.description}
-        </p>
+        {formStatus.form?.description && (
+          <p className="text-xs text-slate-300 leading-relaxed">
+            {formStatus.form.description}
+          </p>
+        )}
 
         {/* Recommendation */}
-        {formStatus.form.recommendation && (
+        {formStatus.form?.recommendation && (
           <div className="pt-2 border-t border-slate-800">
             <p className="text-xs text-slate-400">
               <span className="font-medium text-slate-300">Recommendation:</span>{' '}
