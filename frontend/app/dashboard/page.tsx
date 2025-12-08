@@ -258,10 +258,16 @@ export default function DashboardPage() {
     };
   }, [router]);
 
-  const daysToRace = useMemo(
-    () => getDaysToRace(primaryGoal?.race_date),
-    [primaryGoal?.race_date]
-  );
+  const [daysToRace, setDaysToRace] = useState<number | null>(null);
+
+  // Calculate days to race only on client side to avoid hydration mismatch
+  useEffect(() => {
+    if (primaryGoal?.race_date) {
+      setDaysToRace(getDaysToRace(primaryGoal.race_date));
+    } else {
+      setDaysToRace(null);
+    }
+  }, [primaryGoal?.race_date]);
 
   const avgHours12w = profile?.auto_avg_hours_last_12_weeks;
   const availableHours = profile?.available_hours_per_week;

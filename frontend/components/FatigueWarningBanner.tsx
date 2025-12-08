@@ -21,7 +21,11 @@ export function FatigueWarningBanner({ fatigueData, onDismiss }: FatigueWarningB
     return null;
   }
 
-  const level = fatigueData.overall_fatigue_level.toLowerCase();
+  const levelStr = fatigueData.overall_fatigue_level;
+  if (!levelStr || typeof levelStr !== 'string') {
+    return null;
+  }
+  const level = levelStr.toLowerCase();
   
   // Only show banner for elevated or high fatigue
   if (level === 'low' || level === 'normal') {

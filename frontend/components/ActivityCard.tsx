@@ -37,7 +37,8 @@ export function ActivityCard({ activity }: ActivityCardProps) {
     const kmPerHour = metersPerSecond * 3.6;
     
     // For running, show min/km
-    if (activity.sport_type?.toLowerCase().includes('run')) {
+    const sportType = typeof activity.sport_type === 'string' ? activity.sport_type.toLowerCase() : '';
+    if (sportType.includes('run')) {
       const minPerKm = 60 / kmPerHour;
       const minutes = Math.floor(minPerKm);
       const seconds = Math.round((minPerKm - minutes) * 60);
@@ -49,7 +50,7 @@ export function ActivityCard({ activity }: ActivityCardProps) {
   };
 
   const getSportIcon = () => {
-    const sport = activity.sport_type?.toLowerCase() || '';
+    const sport = typeof activity.sport_type === 'string' ? activity.sport_type.toLowerCase() : '';
     if (sport.includes('run')) return '🏃';
     if (sport.includes('ride') || sport.includes('bike')) return '🚴';
     if (sport.includes('swim')) return '🏊';
@@ -57,7 +58,7 @@ export function ActivityCard({ activity }: ActivityCardProps) {
   };
 
   const getSportColor = () => {
-    const sport = activity.sport_type?.toLowerCase() || '';
+    const sport = typeof activity.sport_type === 'string' ? activity.sport_type.toLowerCase() : '';
     if (sport.includes('run')) return 'text-amber-400 border-amber-500/30 bg-amber-500/10';
     if (sport.includes('ride') || sport.includes('bike')) return 'text-sky-400 border-sky-500/30 bg-sky-500/10';
     if (sport.includes('swim')) return 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10';

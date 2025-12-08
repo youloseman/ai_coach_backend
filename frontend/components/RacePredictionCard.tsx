@@ -55,6 +55,7 @@ export function RacePredictionCard({ predictions, isLoading }: RacePredictionCar
   }
 
   const getConfidenceColor = (confidence: string) => {
+    if (!confidence || typeof confidence !== 'string') return 'text-slate-400';
     const c = confidence.toLowerCase();
     if (c.includes('high')) return 'text-emerald-400';
     if (c.includes('medium')) return 'text-amber-400';
