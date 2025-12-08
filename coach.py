@@ -29,8 +29,9 @@ class WeeklyPlanRequest(BaseModel):
 
 async def run_initial_assessment(goal: GoalInput, activities: list[dict]) -> dict:
     """
-    Вызывает GPT-5.1 и возвращает текст оценки + данные целей.
+    Вызывает GPT-4o и возвращает текст оценки + данные целей.
     """
+    logger.info("initial_assessment_started", goal_type=goal.main_goal_type, activities_count=len(activities))
     athlete_profile = load_athlete_profile()
 
     user_payload = {
@@ -45,37 +46,42 @@ async def run_initial_assessment(goal: GoalInput, activities: list[dict]) -> dic
         "recent_activities": activities,
     }
 
-    completion = openai_client.chat.completions.create(
-        model=GPT_MODEL,
-        temperature=GPT_TEMPERATURE_ASSESSMENT,
-        messages=[
-            {"role": "system", "content": TRAINER_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": (
-                    "You are PERSONAL COACH. Analyze the athlete's recent training history "
-                    "and goals below. Then:\n"
-                    "1) Describe current fitness level and main strengths/weaknesses.\n"
-                    "2) Assess realism of the main goal and secondary goals.\n"
-                    "3) Propose a high-level periodization plan (blocks: base, build, peak, taper) "
-                    "until the main race date.\n"
-                    "4) Provide key weekly focus and approximate weekly hours for each phase.\n\n"
-                    f"DATA (JSON): {json.dumps(user_payload)}"
-                ),
-            },
-        ],
-    )
+    try:
+        completion = openai_client.chat.completions.create(
+            model=GPT_MODEL,
+            temperature=GPT_TEMPERATURE_ASSESSMENT,
+            messages=[
+                {"role": "system", "content": TRAINER_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        "You are PERSONAL COACH. Analyze the athlete's recent training history "
+                        "and goals below. Then:\n"
+                        "1) Describe current fitness level and main strengths/weaknesses.\n"
+                        "2) Assess realism of the main goal and secondary goals.\n"
+                        "3) Propose a high-level periodization plan (blocks: base, build, peak, taper) "
+                        "until the main race date.\n"
+                        "4) Provide key weekly focus and approximate weekly hours for each phase.\n\n"
+                        f"DATA (JSON): {json.dumps(user_payload)}"
+                    ),
+                },
+            ],
+        )
 
-    answer = completion.choices[0].message.content
+        answer = completion.choices[0].message.content
+        logger.info("initial_assessment_completed", goal_type=goal.main_goal_type, response_length=len(answer))
 
-    return {
-        "goals": user_payload["goals"],
-        "assessment": answer,
-    }
+        return {
+            "goals": user_payload["goals"],
+            "assessment": answer,
+        }
+    except Exception as e:
+        logger.error("initial_assessment_failed", goal_type=goal.main_goal_type, error=str(e))
+        raise
 
 async def run_weekly_plan(req: WeeklyPlanRequest, activities: list[dict]) -> dict:
     """
-    Вызывает GPT-5.1 и возвращает недельный план в виде JSON:
+    Вызывает GPT-4o и возвращает недельный план в виде JSON:
     {
       "week_start_date": "...",
       "total_planned_hours": ...,
@@ -83,6 +89,10 @@ async def run_weekly_plan(req: WeeklyPlanRequest, activities: list[dict]) -> dic
       "notes": {...}
     }
     """
+    logger.info("weekly_plan_generation_started", 
+                week_start=req.week_start_date, 
+                available_hours=req.available_hours_per_week,
+                activities_count=len(activities))
     athlete_profile = load_athlete_profile()
 
     user_payload = {
@@ -150,8 +160,24 @@ async def run_weekly_plan(req: WeeklyPlanRequest, activities: list[dict]) -> dic
 
         plan_json = completion.choices[0].message.content
         plan = json.loads(plan_json)
+        
+        logger.info("weekly_plan_generation_completed", 
+                    week_start=req.week_start_date,
+                    total_hours=plan.get("total_planned_hours", 0),
+                    days_count=len(plan.get("days", [])))
 
         return plan
+    except json.JSONDecodeError as e:
+        logger.error("weekly_plan_json_decode_failed", 
+                    week_start=req.week_start_date, 
+                    error=str(e),
+                    response_preview=completion.choices[0].message.content[:200] if 'completion' in locals() else None)
+        raise ValueError(f"Failed to parse GPT response as JSON: {e}")
+    except Exception as e:
+        logger.error("weekly_plan_generation_failed", 
+                    week_start=req.week_start_date, 
+                    error=str(e))
+        raise
     except json.JSONDecodeError as e:
         logger.error("gpt_invalid_json", error=str(e), response=plan_json[:200])
         raise RuntimeError("GPT returned invalid JSON. Please try again.")
