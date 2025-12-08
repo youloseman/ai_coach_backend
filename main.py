@@ -142,7 +142,12 @@ app.include_router(nutrition_router, prefix="/nutrition", tags=["nutrition"])
 
 @app.get("/analytics/training_load")
 @limiter.limit("30/minute")
-async def get_training_load_analytics(request: Request, weeks: int = 12):
+async def get_training_load_analytics(
+    request: Request,
+    weeks: int = 12,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     Получить комплексный анализ тренировочной нагрузки.
     
@@ -154,7 +159,7 @@ async def get_training_load_analytics(request: Request, weeks: int = 12):
     """
     try:
         # Получаем активности для текущего пользователя
-        activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=weeks)
+        activities = await fetch_activities_last_n_weeks_for_user(current_user.id, db, weeks=weeks)
         
         if not activities:
             return {
@@ -194,7 +199,7 @@ async def get_fitness_timeline(
     try:
         # Получаем активности за этот период для текущего пользователя
         weeks = (days // 7) + 1
-        activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=weeks)
+        activities = await fetch_activities_last_n_weeks_for_user(current_user.id, db, weeks=weeks)
         
         if not activities:
             return {
