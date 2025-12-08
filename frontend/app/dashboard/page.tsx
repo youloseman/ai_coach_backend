@@ -150,7 +150,6 @@ export default function DashboardPage() {
   // Recent activities
   const {
     data: recentActivities,
-    isLoading: activitiesLoading,
   } = useQuery({
     queryKey: ['recentActivities'],
     queryFn: async () => {
@@ -175,7 +174,6 @@ export default function DashboardPage() {
   // Fatigue analysis
   const {
     data: fatigueData,
-    isLoading: fatigueLoading,
   } = useQuery({
     queryKey: ['fatigueAnalysis'],
     queryFn: async () => {
@@ -979,7 +977,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {recentActivities.map((activity: any) => (
+              {recentActivities.map((activity) => (
                 <ActivityCard key={activity.id} activity={activity} />
               ))}
             </div>

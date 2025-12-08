@@ -1,5 +1,5 @@
 // components/RacePredictionCard.tsx
-import { Trophy, TrendingUp, Clock, Target } from 'lucide-react';
+import { Trophy, Target } from 'lucide-react';
 
 interface Prediction {
   race_type: string;
@@ -14,12 +14,17 @@ interface Prediction {
   };
 }
 
+interface BestEffort {
+  time?: string;
+  formatted_time?: string;
+}
+
 interface RacePredictionCardProps {
   predictions: {
     status: string;
     sport: string;
     predictions: Prediction[];
-    best_efforts?: Record<string, any>;
+    best_efforts?: Record<string, BestEffort>;
   } | null;
   isLoading?: boolean;
 }
@@ -117,7 +122,7 @@ export function RacePredictionCard({ predictions, isLoading }: RacePredictionCar
             Best Recent Efforts
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
-            {Object.entries(predictions.best_efforts).map(([key, effort]: [string, any]) => (
+            {Object.entries(predictions.best_efforts).map(([key, effort]: [string, BestEffort]) => (
               <div key={key} className="flex items-center justify-between text-slate-400">
                 <span className="capitalize">{key.replace('_', ' ')}</span>
                 <span className="text-slate-300">{effort.time || effort.formatted_time}</span>
