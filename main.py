@@ -33,10 +33,10 @@ from strava_client import (
     fetch_activities_last_n_weeks,
     fetch_activities_last_n_weeks_for_user,
     fetch_activity_by_id,
-    load_tokens,
 )
 from strava_auth import save_strava_tokens
 from models import User
+import models
 import crud
 from auth import get_current_user
 from performance_predictions import predict_for_goal, find_best_efforts, predict_race_times
@@ -133,8 +133,8 @@ async def get_training_load_analytics(request: Request, weeks: int = 12):
     - Ramp Rate - скорость набора формы
     """
     try:
-        # Получаем активности
-        activities = await fetch_activities_last_n_weeks(weeks=weeks)
+        # Получаем активности для текущего пользователя
+        activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=weeks)
         
         if not activities:
             return {
@@ -163,14 +163,18 @@ async def get_training_load_analytics(request: Request, weeks: int = 12):
 
 
 @app.get("/analytics/fitness_timeline")
-async def get_fitness_timeline(days: int = 90):
+async def get_fitness_timeline(
+    days: int = 90,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Получить timeline метрик (CTL, ATL, TSB) за период.
     """
     try:
-        # Получаем активности за этот период
+        # Получаем активности за этот период для текущего пользователя
         weeks = (days // 7) + 1
-        activities = await fetch_activities_last_n_weeks(weeks=weeks)
+        activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=weeks)
         
         if not activities:
             return {
@@ -197,13 +201,16 @@ async def get_fitness_timeline(days: int = 90):
 
 
 @app.get("/analytics/form_status")
-async def get_current_form_status():
+async def get_current_form_status(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Получить текущий статус формы (TSB интерпретация).
     """
     try:
-        # Получаем последние 12 недель
-        activities = await fetch_activities_last_n_weeks(weeks=12)
+        # Получаем последние 12 недель для текущего пользователя
+        activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=12)
         
         if not activities:
             return {
@@ -242,7 +249,11 @@ async def get_current_form_status():
         }
 
 @app.get("/analytics/fatigue")
-async def get_fatigue_analysis(weeks: int = 4):
+async def get_fatigue_analysis(
+    weeks: int = 4,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Анализ усталости на основе HR данных и performance metrics.
     
@@ -256,8 +267,8 @@ async def get_fatigue_analysis(weeks: int = 4):
         FatigueReport с уровнем усталости и рекомендациями
     """
     try:
-        # Получаем активности за последние N недель
-        activities = await fetch_activities_last_n_weeks(weeks=weeks)
+        # Получаем активности за последние N недель для текущего пользователя
+        activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=weeks)
         
         if not activities:
             return {
@@ -289,7 +300,9 @@ async def predict_race_performance(
     goal_race_type: str = "HM",  # "5K", "10K", "HM", "Marathon"
     goal_time: str = "1:30:00",
     sport: str = "run",
-    weeks: int = 12
+    weeks: int = 12,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
     Прогнозирует время на гонку на основе тренировочных данных.
@@ -304,8 +317,8 @@ async def predict_race_performance(
         Прогноз с вероятностью успеха и рекомендациями
     """
     try:
-        # Получаем активности
-        activities = await fetch_activities_last_n_weeks(weeks=weeks)
+        # Получаем активности для текущего пользователя
+        activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=weeks)
         
         if not activities:
             return {
@@ -342,13 +355,18 @@ async def predict_race_performance(
 
 
 @app.get("/analytics/all_predictions")
-async def get_all_race_predictions(sport: str = "run", weeks: int = 12):
+async def get_all_race_predictions(
+    sport: str = "run", 
+    weeks: int = 12,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Прогнозы на все стандартные дистанции (5K, 10K, HM, Marathon).
     """
     try:
-        # Получаем активности
-        activities = await fetch_activities_last_n_weeks(weeks=weeks)
+        # Получаем активности для текущего пользователя
+        activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=weeks)
         
         if not activities:
             return {
@@ -403,7 +421,11 @@ async def get_all_race_predictions(sport: str = "run", weeks: int = 12):
 # ===== TRAINING DASHBOARD =====
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def get_training_dashboard(weeks: int = 12):
+async def get_training_dashboard(
+    weeks: int = 12,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Генерирует интерактивный HTML dashboard с графиками прогресса.
     
@@ -421,8 +443,8 @@ async def get_training_dashboard(weeks: int = 12):
         HTML страница с интерактивными графиками
     """
     try:
-        # Получаем активности
-        activities = await fetch_activities_last_n_weeks(weeks=weeks)
+        # Получаем активности для текущего пользователя
+        activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=weeks)
         
         if not activities:
             return HTMLResponse(content="""
@@ -457,7 +479,11 @@ async def get_training_dashboard(weeks: int = 12):
 
 
 @app.get("/dashboard/download")
-async def download_dashboard(weeks: int = 12):
+async def download_dashboard(
+    weeks: int = 12,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Скачивает dashboard как HTML файл.
     """
@@ -465,8 +491,8 @@ async def download_dashboard(weeks: int = 12):
         from fastapi.responses import FileResponse
         from pathlib import Path
         
-        # Получаем активности
-        activities = await fetch_activities_last_n_weeks(weeks=weeks)
+        # Получаем активности для текущего пользователя
+        activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=weeks)
         
         if not activities:
             raise HTTPException(status_code=404, detail="No activities found")
@@ -502,11 +528,15 @@ async def download_dashboard(weeks: int = 12):
 # ===== PROGRESS TRACKING =====
 
 @app.post("/progress/track")
-async def progress_track(req: ProgressRequest):
+async def progress_track(
+    req: ProgressRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Отслеживание прогресса за последние N недель.
     """
-    activities = await fetch_activities_last_n_weeks(weeks=req.weeks)
+    activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=req.weeks)
     result = await run_progress_tracker(req, activities)
     return result
 

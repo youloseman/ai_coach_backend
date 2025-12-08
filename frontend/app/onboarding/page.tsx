@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { isAuthenticated } from '@/lib/auth';
+import { isAuthenticated, getAuthToken } from '@/lib/auth';
 import { profileAPI, goalsAPI } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import type { AthleteProfile, GoalCreate } from '@/types';
@@ -40,10 +40,17 @@ export default function OnboardingPage() {
   const [sportCategory, setSportCategory] = useState<SportCategory>('triathlon');
 
   useEffect(() => {
-    if (!isAuthenticated()) {
+    // Validate token on mount
+    const token = getAuthToken();
+    if (!token) {
       router.replace('/login');
       return;
     }
+
+    // Clear stale state
+    setProfile(null);
+    setError(null);
+    setStatus('idle');
 
     let cancelled = false;
 
@@ -52,6 +59,7 @@ export default function OnboardingPage() {
         setStatus('loading');
         setError(null);
 
+        // Always fetch fresh data
         const [profileData, primaryGoalResult] = await Promise.allSettled([
           profileAPI.get(),
           goalsAPI.getPrimary(),
@@ -82,6 +90,8 @@ export default function OnboardingPage() {
 
     return () => {
       cancelled = true;
+      // Clear state on unmount
+      setProfile(null);
     };
   }, [router]);
 

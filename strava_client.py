@@ -8,14 +8,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from sqlalchemy.orm import Session
 
 from strava_auth import get_user_tokens
-from config import STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, TOKENS_FILE, logger
-from state_store import load_state, save_state
+from config import STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, logger
 from cache import (
     get_cached_strava_activities,
     cache_strava_activities,
 )
-
-STRAVA_TOKENS_STATE_KEY = "strava_tokens"
 
 
 async def fetch_activities_for_user(
@@ -121,43 +118,6 @@ async def fetch_activity_by_id(
     resp.raise_for_status()
     return resp.json()
 
-def _write_tokens_file(token_data: dict) -> None:
-    try:
-        TOKENS_FILE.write_text(
-            json.dumps(token_data, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-    except Exception as e:
-        logger.warning("Failed to persist Strava tokens to disk: %s", e)
-
-
-def _persist_tokens(token_data: dict) -> None:
-    _write_tokens_file(token_data)
-    try:
-        save_state(STRAVA_TOKENS_STATE_KEY, token_data)
-    except Exception as e:
-        logger.warning("Failed to persist Strava tokens to DB: %s", e)
-
-
-def load_tokens() -> dict:
-    """
-    DEPRECATED: This function uses global tokens from file.
-    Use get_user_tokens(user_id, db) instead for user-specific tokens.
-    """
-    logger.warning("load_tokens_deprecated", message="Using deprecated load_tokens(). Use get_user_tokens() instead.")
-    if not TOKENS_FILE.exists():
-        try:
-            persisted = load_state(STRAVA_TOKENS_STATE_KEY)
-        except Exception as e:
-            logger.warning("Failed to load Strava tokens from DB: %s", e)
-            persisted = None
-        if not persisted:
-            raise RuntimeError("No Strava tokens found. Authorize first via /auth/strava/login")
-        _write_tokens_file(persisted)
-        return persisted
-    return json.loads(TOKENS_FILE.read_text(encoding="utf-8"))
-
-
 async def refresh_access_token_if_needed(user_id: int, db: Session, tokens: dict) -> dict:
     """
     Проверяем срок действия access_token для конкретного пользователя.
@@ -194,18 +154,6 @@ async def refresh_access_token_if_needed(user_id: int, db: Session, tokens: dict
     await save_user_tokens(user_id, db, new_tokens)
     logger.info("strava_token_refreshed", user_id=user_id)
     return new_tokens
-
-
-async def get_valid_access_token() -> str:
-    """
-    DEPRECATED: This function uses global tokens from file.
-    Use get_user_tokens(user_id, db) instead for user-specific tokens.
-    """
-    logger.warning("get_valid_access_token_deprecated", message="Using deprecated get_valid_access_token(). Use get_user_tokens() instead.")
-    tokens = load_tokens()
-    # Note: refresh_access_token_if_needed now requires user_id and db
-    # This is a legacy function, so we can't properly refresh here
-    return tokens.get("access_token", "")
 
 
 async def exchange_code_for_token(code: str) -> dict:

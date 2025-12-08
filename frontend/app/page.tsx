@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { isAuthenticated } from '@/lib/auth';
+import { isAuthenticated, getAuthToken } from '@/lib/auth';
 import { goalsAPI } from '@/lib/api';
 
 type Status = 'idle' | 'checking' | 'done';
@@ -14,7 +14,9 @@ export default function HomePage() {
 
   useEffect(() => {
     const run = async () => {
-      if (!isAuthenticated()) {
+      // Validate token on mount
+      const token = getAuthToken();
+      if (!token) {
         router.replace('/login');
         return;
       }

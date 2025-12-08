@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { isAuthenticated } from '@/lib/auth';
+import { isAuthenticated, getAuthToken } from '@/lib/auth';
 import { coachAPI, stravaAPI, API_URL } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import type { CoachProfile, CoachLevel, StravaStatus } from '@/types';
@@ -25,10 +25,18 @@ export default function CoachProfilePage() {
   const [stravaStatus, setStravaStatus] = useState<StravaStatus | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
+    // Validate token on mount
+    const token = getAuthToken();
+    if (!token) {
       router.replace('/login');
       return;
     }
+
+    // Clear stale state
+    setCoachProfile(null);
+    setStravaStatus(null);
+    setError(null);
+    setStatus('idle');
 
     let cancelled = false;
 
@@ -37,6 +45,7 @@ export default function CoachProfilePage() {
         setStatus('loading');
         setError(null);
 
+        // Always fetch fresh data
         const [profileResult, stravaResult] = await Promise.allSettled([
           coachAPI.getProfile(),
           stravaAPI.getStatus(),
@@ -70,6 +79,9 @@ export default function CoachProfilePage() {
 
     return () => {
       cancelled = true;
+      // Clear state on unmount
+      setCoachProfile(null);
+      setStravaStatus(null);
     };
   }, [router]);
 

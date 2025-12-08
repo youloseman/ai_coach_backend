@@ -34,8 +34,8 @@ else:
     # Клиент OpenAI
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Файл для хранения Strava токенов (исторический, для одного пользователя)
-TOKENS_FILE = Path("strava_token.json")
+# DEPRECATED: TOKENS_FILE removed - tokens are now stored per-user in database
+# Use strava_auth.get_user_tokens(user_id, db) instead
 
 
 # ===== EMAIL CONFIG =====

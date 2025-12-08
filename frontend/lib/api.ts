@@ -48,10 +48,29 @@ const api = axios.create({
 });
 
 // ---------- REQUEST INTERCEPTOR ----------
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
+api.interceptors.request.use(
+  (config) => {
+    if (typeof window === 'undefined') return config;
+    
     const token = localStorage.getItem('token');
 
+    // Check token before making request
+    if (!token) {
+      // If no token and not on auth pages, redirect to login
+      const isAuthPage = 
+        config.url?.includes('/auth/login') || 
+        config.url?.includes('/auth/register') ||
+        window.location.pathname === '/login' ||
+        window.location.pathname === '/register';
+      
+      if (!isAuthPage) {
+        console.warn('No token found - redirecting to login');
+        window.location.href = '/login';
+        return Promise.reject(new Error('No authentication token'));
+      }
+    }
+
+    // Add Authorization header if token exists
     if (token) {
       config.headers = config.headers ?? {};
       config.headers.Authorization = `Bearer ${token}`;
@@ -65,10 +84,13 @@ api.interceptors.request.use((config) => {
         headers: config.headers,
       });
     }
-  }
 
-  return config;
-});
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 // Response interceptor - обработка ошибок
 api.interceptors.response.use(
@@ -97,13 +119,27 @@ api.interceptors.response.use(
       }
 
       // Для всех остальных запросов 401 трактуем как истёкший/некорректный токен.
-      console.error('Token expired - logging out');
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-
-      // Redirect to login only if not already on login page
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+      console.error('Token expired or invalid - logging out');
+      
+      // Clear all auth data immediately
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.clear();
+        
+        // Clear cookies
+        if (typeof document !== 'undefined') {
+          document.cookie.split(";").forEach((c) => {
+            document.cookie = c
+              .replace(/^ +/, "")
+              .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+          });
+        }
+        
+        // Redirect to login only if not already on login page
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
       }
 
       return Promise.reject(new Error('Session expired. Please login again.'));

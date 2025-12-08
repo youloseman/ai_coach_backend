@@ -1,5 +1,6 @@
 // lib/auth.ts
 import type { User } from '@/types';
+import { queryClient } from '@/lib/api';
 
 const TOKEN_KEY = 'token';
 const USER_KEY = 'user';
@@ -50,9 +51,23 @@ export const isAuthenticated = (): boolean => {
 };
 
 export const logout = () => {
-  removeAuthToken();
-  removeUser();
-  if (typeof window !== 'undefined') {
-    window.location.href = '/login';
-  }
+  if (typeof window === 'undefined') return;
+  
+  // Clear all localStorage data
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.clear();
+  
+  // Clear all cookies
+  document.cookie.split(";").forEach((c) => {
+    document.cookie = c
+      .replace(/^ +/, "")
+      .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+  });
+  
+  // Clear React Query cache
+  queryClient.clear();
+  
+  // Redirect to login
+  window.location.href = '/login';
 };

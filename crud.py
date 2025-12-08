@@ -210,9 +210,12 @@ def _apply_activity_fields(activity: ActivityDB, user_id: int, strava_activity: 
 
 
 def upsert_activity(db: Session, user_id: int, strava_activity: dict) -> ActivityDB:
-    """Insert or update cached Strava activity."""
+    """Insert or update cached Strava activity for specific user."""
     existing = db.query(ActivityDB).filter(
-        ActivityDB.strava_id == str(strava_activity["id"])
+        and_(
+            ActivityDB.user_id == user_id,
+            ActivityDB.strava_id == str(strava_activity["id"])
+        )
     ).first()
 
     if existing:
@@ -504,9 +507,14 @@ def get_active_injury_risks(db: Session, user_id: int) -> List[InjuryRiskDB]:
     ).order_by(InjuryRiskDB.detected_date.desc()).all()
 
 
-def acknowledge_injury_risk(db: Session, risk_id: int) -> InjuryRiskDB:
-    """Mark injury risk as acknowledged."""
-    risk = db.query(InjuryRiskDB).filter(InjuryRiskDB.id == risk_id).first()
+def acknowledge_injury_risk(db: Session, user_id: int, risk_id: int) -> Optional[InjuryRiskDB]:
+    """Mark injury risk as acknowledged for specific user."""
+    risk = db.query(InjuryRiskDB).filter(
+        and_(
+            InjuryRiskDB.id == risk_id,
+            InjuryRiskDB.user_id == user_id
+        )
+    ).first()
     if risk:
         risk.acknowledged = True
         risk.acknowledged_at = datetime.now(timezone.utc)
@@ -515,9 +523,14 @@ def acknowledge_injury_risk(db: Session, risk_id: int) -> InjuryRiskDB:
     return risk
 
 
-def resolve_injury_risk(db: Session, risk_id: int) -> InjuryRiskDB:
-    """Mark injury risk as resolved."""
-    risk = db.query(InjuryRiskDB).filter(InjuryRiskDB.id == risk_id).first()
+def resolve_injury_risk(db: Session, user_id: int, risk_id: int) -> Optional[InjuryRiskDB]:
+    """Mark injury risk as resolved for specific user."""
+    risk = db.query(InjuryRiskDB).filter(
+        and_(
+            InjuryRiskDB.id == risk_id,
+            InjuryRiskDB.user_id == user_id
+        )
+    ).first()
     if risk:
         risk.resolved = True
         risk.resolved_at = datetime.now(timezone.utc)

@@ -257,7 +257,9 @@ async def acknowledge_injury_risk(
     if risk.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    risk = crud.acknowledge_injury_risk(db, risk_id)
+    risk = crud.acknowledge_injury_risk(db, current_user.id, risk_id)
+    if not risk:
+        raise HTTPException(status_code=404, detail="Risk not found")
     return {"status": "ok", "acknowledged": True}
 
 
@@ -278,7 +280,9 @@ async def resolve_injury_risk(
     if risk.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    risk = crud.resolve_injury_risk(db, risk_id)
+    risk = crud.resolve_injury_risk(db, current_user.id, risk_id)
+    if not risk:
+        raise HTTPException(status_code=404, detail="Risk not found")
     return {"status": "ok", "resolved": True}
 
 

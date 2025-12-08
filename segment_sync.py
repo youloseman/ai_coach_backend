@@ -10,7 +10,7 @@ import datetime as dt
 from config import logger
 import crud
 from models import ActivityDB
-from strava_client import get_valid_access_token
+from strava_auth import get_user_tokens
 
 
 # ===== SEGMENT SYNC =====
@@ -28,7 +28,9 @@ async def sync_segment_efforts_for_activity(
         Number of segment efforts synced
     """
     try:
-        access_token = await get_valid_access_token()
+        # Get user-specific tokens from database
+        tokens = await get_user_tokens(user_id, db)
+        access_token = tokens['access_token']
         
         # Fetch activity details with segments
         url = f"https://www.strava.com/api/v3/activities/{strava_activity_id}"

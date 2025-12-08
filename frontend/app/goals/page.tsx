@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { isAuthenticated } from '@/lib/auth';
+import { isAuthenticated, getAuthToken } from '@/lib/auth';
 import { goalsAPI } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import type { Goal, GoalCreate } from '@/types';
@@ -48,10 +48,17 @@ export default function GoalsPage() {
   const [sportCategory, setSportCategory] = useState<SportCategory>('triathlon');
 
   useEffect(() => {
-    if (!isAuthenticated()) {
+    // Validate token on mount
+    const token = getAuthToken();
+    if (!token) {
       router.replace('/login');
       return;
     }
+
+    // Clear stale state
+    setGoals([]);
+    setError(null);
+    setStatus('idle');
 
     let isCancelled = false;
 
@@ -59,6 +66,7 @@ export default function GoalsPage() {
       try {
         setStatus('loading');
         setError(null);
+        // Always fetch fresh data
         const data = await goalsAPI.list(false);
         if (isCancelled) return;
         setGoals(data);
@@ -75,6 +83,8 @@ export default function GoalsPage() {
 
     return () => {
       isCancelled = true;
+      // Clear state on unmount
+      setGoals([]);
     };
   }, [router]);
 

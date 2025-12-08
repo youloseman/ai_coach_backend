@@ -4,7 +4,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { isAuthenticated, logout } from '@/lib/auth';
+import { isAuthenticated, logout, getAuthToken } from '@/lib/auth';
 import { profileAPI, goalsAPI, coachAPI, analyticsAPI, stravaAPI } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import type { AthleteProfile, Goal, WeeklyPlan, CoachZonesSummary, StravaActivity } from '@/types';
@@ -197,10 +197,21 @@ export default function DashboardPage() {
   const [showFatigueBanner, setShowFatigueBanner] = useState(true);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
+    // Validate token on mount
+    const token = getAuthToken();
+    if (!token) {
+      console.warn('No token found on dashboard mount - redirecting to login');
       router.replace('/login');
       return;
     }
+
+    // Clear any stale state from previous user
+    setProfile(null);
+    setPrimaryGoal(null);
+    setAllGoals([]);
+    setZones(null);
+    setError(null);
+    setStatus('idle');
 
     let isCancelled = false;
 
@@ -209,6 +220,7 @@ export default function DashboardPage() {
         setStatus('loading');
         setError(null);
 
+        // Always fetch fresh data from API
         const [profileData, primaryGoalData, goalsListData, zonesData] = await Promise.allSettled([
           profileAPI.get(),
           goalsAPI.getPrimary(),
@@ -255,6 +267,11 @@ export default function DashboardPage() {
 
     return () => {
       isCancelled = true;
+      // Clear state on unmount to prevent data leakage
+      setProfile(null);
+      setPrimaryGoal(null);
+      setAllGoals([]);
+      setZones(null);
     };
   }, [router]);
 
