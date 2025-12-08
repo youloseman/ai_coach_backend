@@ -301,6 +301,171 @@ export const stravaAPI = {
     const response = await api.get<StravaStatus>('/strava/status');
     return response.data;
   },
+  
+  getActivities: async (page = 1, perPage = 10) => {
+    const response = await api.get('/strava/activities', {
+      params: { page, per_page: perPage }
+    });
+    return response.data;
+  },
+};
+
+// ---------- ANALYTICS ----------
+export const analyticsAPI = {
+  getTrainingLoad: async (weeks = 12) => {
+    const response = await api.get('/analytics/training_load', {
+      params: { weeks }
+    });
+    return response.data;
+  },
+  
+  getFormStatus: async () => {
+    const response = await api.get('/analytics/form_status');
+    return response.data;
+  },
+  
+  getFatigueAnalysis: async (weeks = 4) => {
+    const response = await api.get('/analytics/fatigue', {
+      params: { weeks }
+    });
+    return response.data;
+  },
+  
+  predictRace: async (
+    goalRaceType: string,
+    goalTime: string,
+    sport = 'run',
+    weeks = 12
+  ) => {
+    const response = await api.get('/analytics/predict_race', {
+      params: {
+        goal_race_type: goalRaceType,
+        goal_time: goalTime,
+        sport,
+        weeks
+      }
+    });
+    return response.data;
+  },
+  
+  getAllPredictions: async (sport = 'run', weeks = 12) => {
+    const response = await api.get('/analytics/all_predictions', {
+      params: { sport, weeks }
+    });
+    return response.data;
+  },
+};
+
+// ---------- NUTRITION ----------
+export const nutritionAPI = {
+  calculateTargets: async (payload: {
+    weight_kg: number;
+    goal: string;
+    activity_level?: string;
+  }) => {
+    const response = await api.post('/nutrition/targets/calculate', payload);
+    return response.data;
+  },
+  
+  getTargets: async () => {
+    const response = await api.get('/nutrition/targets');
+    return response.data;
+  },
+  
+  generateRaceFueling: async (payload: {
+    race_type: string;
+    estimated_duration_hours: number;
+    weight_kg: number;
+    experience_level?: string;
+  }) => {
+    const response = await api.post('/nutrition/race-fueling', payload);
+    return response.data;
+  },
+  
+  getRaceFueling: async (raceType?: string) => {
+    const url = raceType
+      ? `/nutrition/race-fueling/${raceType}`
+      : '/nutrition/race-fueling';
+    const response = await api.get(url);
+    return response.data;
+  },
+};
+
+// ---------- PERFORMANCE / SEGMENTS ----------
+export const performanceAPI = {
+  getSegments: async (limit = 50) => {
+    const response = await api.get('/segments', {
+      params: { limit }
+    });
+    return response.data;
+  },
+  
+  getSegmentEfforts: async (filters?: {
+    segment_id?: number;
+    limit?: number;
+    only_prs?: boolean;
+  }) => {
+    const response = await api.get('/segment-efforts', {
+      params: filters
+    });
+    return response.data;
+  },
+  
+  getSegmentPRs: async (limit = 50) => {
+    const response = await api.get('/segment-prs', {
+      params: { limit }
+    });
+    return response.data;
+  },
+  
+  getPersonalRecords: async (sportType?: string) => {
+    const response = await api.get('/personal-records', {
+      params: sportType ? { sport_type: sportType } : {}
+    });
+    return response.data;
+  },
+  
+  getPersonalRecord: async (sportType: string, distanceCategory: string) => {
+    const response = await api.get(
+      `/personal-records/${sportType}/${distanceCategory}`
+    );
+    return response.data;
+  },
+  
+  getInjuryRisks: async () => {
+    const response = await api.get('/injury-risks');
+    return response.data;
+  },
+  
+  acknowledgeRisk: async (riskId: number) => {
+    const response = await api.post(`/injury-risks/${riskId}/acknowledge`);
+    return response.data;
+  },
+  
+  resolveRisk: async (riskId: number) => {
+    const response = await api.post(`/injury-risks/${riskId}/resolve`);
+    return response.data;
+  },
+  
+  getPerformanceSummary: async () => {
+    const response = await api.get('/performance-summary');
+    return response.data;
+  },
+  
+  syncSegments: async () => {
+    const response = await api.post('/sync-segments');
+    return response.data;
+  },
+  
+  scanPersonalRecords: async () => {
+    const response = await api.post('/scan-prs');
+    return response.data;
+  },
+  
+  analyzeInjuryRisk: async () => {
+    const response = await api.post('/analyze-injury-risk');
+    return response.data;
+  },
 };
 
 export default api;

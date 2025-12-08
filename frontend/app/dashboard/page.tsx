@@ -5,13 +5,17 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { isAuthenticated, logout } from '@/lib/auth';
-import { profileAPI, goalsAPI, coachAPI } from '@/lib/api';
+import { profileAPI, goalsAPI, coachAPI, analyticsAPI, stravaAPI } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import type { AthleteProfile, Goal, WeeklyPlan, CoachZonesSummary } from '@/types';
 import { Activity, Calendar, HeartPulse, Target, ClipboardList, LogOut } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PerformanceChart } from '@/components/PerformanceChart';
+import { ActivityCard } from '@/components/ActivityCard';
+import { FormStatusCard } from '@/components/FormStatusCard';
+import { RacePredictionCard } from '@/components/RacePredictionCard';
+import { FatigueWarningBanner } from '@/components/FatigueWarningBanner';
 import api from '@/lib/api';
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
@@ -142,6 +146,57 @@ export default function DashboardPage() {
       return response.data.timeline || [];
     },
   });
+
+  // Recent activities
+  const {
+    data: recentActivities,
+    isLoading: activitiesLoading,
+  } = useQuery({
+    queryKey: ['recentActivities'],
+    queryFn: async () => {
+      const response = await stravaAPI.getActivities(1, 5);
+      return response.activities || [];
+    },
+    enabled: isAuthenticated(),
+  });
+
+  // Form status
+  const {
+    data: formStatus,
+    isLoading: formStatusLoading,
+  } = useQuery({
+    queryKey: ['formStatus'],
+    queryFn: async () => {
+      return await analyticsAPI.getFormStatus();
+    },
+    enabled: isAuthenticated(),
+  });
+
+  // Fatigue analysis
+  const {
+    data: fatigueData,
+    isLoading: fatigueLoading,
+  } = useQuery({
+    queryKey: ['fatigueAnalysis'],
+    queryFn: async () => {
+      return await analyticsAPI.getFatigueAnalysis(4);
+    },
+    enabled: isAuthenticated(),
+  });
+
+  // Race predictions
+  const {
+    data: racePredictions,
+    isLoading: predictionsLoading,
+  } = useQuery({
+    queryKey: ['racePredictions'],
+    queryFn: async () => {
+      return await analyticsAPI.getAllPredictions('run', 12);
+    },
+    enabled: isAuthenticated(),
+  });
+
+  const [showFatigueBanner, setShowFatigueBanner] = useState(true);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -619,6 +674,14 @@ export default function DashboardPage() {
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
+        {/* Fatigue Warning */}
+        {showFatigueBanner && fatigueData && (
+          <FatigueWarningBanner
+            fatigueData={fatigueData.fatigue_analysis || fatigueData}
+            onDismiss={() => setShowFatigueBanner(false)}
+          />
+        )}
+
         {/* Performance chart */}
         <section className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
           <h2 className="text-sm font-semibold mb-2">
@@ -686,6 +749,12 @@ export default function DashboardPage() {
             icon={HeartPulse}
             color="emerald"
           />
+        </section>
+
+        {/* Form Status & Race Predictions */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <FormStatusCard formStatus={formStatus} isLoading={formStatusLoading} />
+          <RacePredictionCard predictions={racePredictions} isLoading={predictionsLoading} />
         </section>
 
         {/* Primary race card */}
@@ -893,6 +962,26 @@ export default function DashboardPage() {
                   </div>
                 );
               })}
+            </div>
+          </section>
+        )}
+
+        {/* Recent Activities */}
+        {recentActivities && recentActivities.length > 0 && (
+          <section className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-sky-400" />
+                <h2 className="text-sm font-semibold">Recent Activities</h2>
+              </div>
+              <span className="text-xs text-slate-500">
+                Last 5 workouts from Strava
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {recentActivities.map((activity: any) => (
+                <ActivityCard key={activity.id} activity={activity} />
+              ))}
             </div>
           </section>
         )}
