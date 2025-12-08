@@ -537,12 +537,38 @@ async def root():
 
 
 @app.get("/auth/strava/callback")
-async def strava_callback(code: str):
+async def strava_callback(
+    code: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     Обратный вызов от Strava после авторизации.
-    Сохраняет токены Strava в файл strava_token.json (глобальный для сервера).
+    Сохраняет токены Strava в БД для текущего пользователя.
     """
-    await exchange_code_for_token(code)
+    from strava_client import exchange_code_for_token
+    token_data = await exchange_code_for_token(code)
+    
+    # Save tokens to DB for current user
+    athlete_id = str(token_data.get("athlete", {}).get("id", ""))
+    access_token = token_data.get("access_token")
+    refresh_token = token_data.get("refresh_token")
+    expires_at = token_data.get("expires_at")
+    
+    if not all([athlete_id, access_token, refresh_token, expires_at]):
+        raise HTTPException(status_code=400, detail="Invalid token data from Strava")
+    
+    await save_strava_tokens(
+        user_id=current_user.id,
+        athlete_id=athlete_id,
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_at=expires_at,
+        db=db
+    )
+    
+    logger.info("strava_connected", user_id=current_user.id, athlete_id=athlete_id)
+    
     return JSONResponse(
         content={
             "status": "ok",
@@ -553,11 +579,17 @@ async def strava_callback(code: str):
 
 
 @app.get("/strava/activities")
-async def get_strava_activities(page: int = 1, per_page: int = 50):
+async def get_strava_activities(
+    page: int = 1,
+    per_page: int = 50,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
-    Получить активности из Strava (с пагинацией).
+    Получить активности из Strava для текущего пользователя (с пагинацией).
     """
-    activities = await fetch_activities(page=page, per_page=per_page)
+    from strava_client import fetch_activities
+    activities = await fetch_activities(current_user.id, db, page=page, per_page=per_page)
     return {
         "count": len(activities),
         "page": page,
@@ -567,21 +599,22 @@ async def get_strava_activities(page: int = 1, per_page: int = 50):
 
 
 @app.get("/strava/status")
-async def strava_status():
+async def strava_status(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
   """
-  Простой статус подключения Strava для фронтенда.
+  Простой статус подключения Strava для текущего пользователя.
   """
   try:
-      tokens = load_tokens()
-      athlete = tokens.get("athlete", {}) or {}
+      from strava_auth import get_user_tokens
+      tokens = await get_user_tokens(current_user.id, db)
       return {
           "connected": True,
-          "athlete_name": f"{athlete.get('firstname', '')} {athlete.get('lastname', '')}".strip()
-          or None,
-          "athlete_id": athlete.get("id"),
-          "expires_at": tokens.get("expires_at"),
+          "athlete_id": tokens.get("athlete_id"),
+          "expires_at": int(tokens.get("expires_at").timestamp()) if tokens.get("expires_at") else None,
       }
-  except Exception:
+  except (ValueError, Exception):
       return {"connected": False}
 
 

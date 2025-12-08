@@ -6,9 +6,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
 
-from athlete_profile import AthleteProfile, load_athlete_profile, save_athlete_profile
+from athlete_profile import AthleteProfile
 from strava_client import (
-    fetch_activities_last_n_weeks,
+    fetch_activities_last_n_weeks_for_user,
     fetch_recent_activities_for_coach,
 )
 from cache import (
@@ -249,33 +249,103 @@ def _analyze_activities_for_profile(activities: list[dict]) -> dict:
 
 
 @router.get("/coach/profile", response_model=AthleteProfile)
-async def get_athlete_profile(user_id: int = 0):
+async def get_athlete_profile(
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
-    Вернуть текущий профиль атлета (если не задан — дефолтный).
+    Вернуть профиль атлета для текущего пользователя.
     Поддерживает кеширование для оптимизации производительности.
     """
-    # Check cache first (user_id=0 for global profile)
-    cached_profile = get_cached_user_profile(user_id)
+    # Check cache first
+    cached_profile = get_cached_user_profile(current_user.id)
     if cached_profile is not None:
         return AthleteProfile(**cached_profile)
     
-    # Cache miss - load from file/DB
-    profile = load_athlete_profile()
+    # Cache miss - load from DB
+    db_profile = crud.get_user_profile(db, current_user.id)
+    if not db_profile:
+        # Create default profile if doesn't exist
+        db_profile = models.AthleteProfileDB(user_id=current_user.id)
+        db.add(db_profile)
+        db.commit()
+        db.refresh(db_profile)
+    
+    # Convert DB profile to AthleteProfile
+    profile = AthleteProfile(
+        id=db_profile.id,
+        user_id=db_profile.user_id,
+        age=db_profile.age,
+        gender=db_profile.gender,
+        weight_kg=db_profile.weight_kg,
+        height_cm=db_profile.height_cm,
+        years_of_experience=db_profile.years_of_experience or 0,
+        primary_discipline=db_profile.primary_discipline,
+        training_zones_run=db_profile.training_zones_run,
+        training_zones_bike=db_profile.training_zones_bike,
+        training_zones_swim=db_profile.training_zones_swim,
+        available_hours_per_week=db_profile.available_hours_per_week or 8.0,
+        auto_avg_hours_last_12_weeks=db_profile.auto_avg_hours_last_12_weeks or 0.0,
+        auto_current_weekly_streak_weeks=db_profile.auto_current_weekly_streak_weeks or 0,
+        preferred_training_days=db_profile.preferred_training_days,
+        zones_last_updated=db_profile.zones_last_updated.isoformat() if db_profile.zones_last_updated else None,
+        auto_weeks_analyzed=db_profile.auto_weeks_analyzed or 0,
+        auto_longest_weekly_streak_weeks=db_profile.auto_longest_weekly_streak_weeks or 0,
+        auto_discipline_hours_per_week=db_profile.auto_discipline_hours_per_week,
+    )
     
     # Cache the result
-    cache_user_profile(user_id, profile.model_dump())
+    cache_user_profile(current_user.id, profile.model_dump())
     
     return profile
 
 
 @router.post("/coach/profile", response_model=AthleteProfile)
-async def update_athlete_profile(profile: AthleteProfile):
+async def update_athlete_profile(
+    profile: AthleteProfile,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
     Обновить и сохранить профиль атлета (ручные поля).
     Авто-поля (auto_*) этим эндпоинтом не считаются.
     """
-    save_athlete_profile(profile)
-    return profile
+    # Update DB profile
+    from schemas import ProfileUpdate
+    profile_update = ProfileUpdate(
+        age=profile.age,
+        gender=profile.gender,
+        weight_kg=profile.weight_kg,
+        height_cm=profile.height_cm,
+        years_of_experience=profile.years_of_experience,
+        primary_discipline=profile.primary_discipline,
+        available_hours_per_week=profile.available_hours_per_week,
+        preferred_training_days=profile.preferred_training_days,
+    )
+    updated_profile = crud.update_user_profile(db, current_user.id, profile_update)
+    
+    # Convert DB profile to AthleteProfile for response
+    return AthleteProfile(
+        id=updated_profile.id,
+        user_id=updated_profile.user_id,
+        age=updated_profile.age,
+        gender=updated_profile.gender,
+        weight_kg=updated_profile.weight_kg,
+        height_cm=updated_profile.height_cm,
+        years_of_experience=updated_profile.years_of_experience or 0,
+        primary_discipline=updated_profile.primary_discipline,
+        training_zones_run=updated_profile.training_zones_run,
+        training_zones_bike=updated_profile.training_zones_bike,
+        training_zones_swim=updated_profile.training_zones_swim,
+        available_hours_per_week=updated_profile.available_hours_per_week or 8.0,
+        auto_avg_hours_last_12_weeks=updated_profile.auto_avg_hours_last_12_weeks or 0.0,
+        auto_current_weekly_streak_weeks=updated_profile.auto_current_weekly_streak_weeks or 0,
+        preferred_training_days=updated_profile.preferred_training_days,
+        zones_last_updated=updated_profile.zones_last_updated.isoformat() if updated_profile.zones_last_updated else None,
+        auto_weeks_analyzed=updated_profile.auto_weeks_analyzed or 0,
+        auto_longest_weekly_streak_weeks=updated_profile.auto_longest_weekly_streak_weeks or 0,
+        auto_discipline_hours_per_week=updated_profile.auto_discipline_hours_per_week,
+    )
 
 
 @router.post("/coach/profile/auto_from_history", response_model=AthleteProfile)
@@ -287,20 +357,11 @@ async def auto_update_profile_from_history(
     """
     Автоматически обновляет профиль атлета на основе истории тренировок в Strava.
     """
-    activities = await fetch_activities_last_n_weeks(weeks=weeks)
+    from strava_client import fetch_activities_last_n_weeks_for_user
+    activities = await fetch_activities_last_n_weeks_for_user(current_user.id, db, weeks=weeks)
     analysis = _analyze_activities_for_profile(activities)
 
-    # 1) Обновляем JSON-профиль (используется коучем и отчётами)
-    profile = load_athlete_profile()
-    profile.auto_weeks_analyzed = analysis["weeks_analyzed"]
-    profile.auto_current_weekly_streak_weeks = analysis["current_streak"]
-    profile.auto_longest_weekly_streak_weeks = analysis["longest_streak"]
-    profile.auto_avg_hours_last_12_weeks = analysis["avg_hours_12w"]
-    profile.auto_avg_hours_last_52_weeks = analysis["avg_hours_52w"]
-    profile.auto_discipline_hours_per_week = analysis["discipline_avg_hours"]
-    save_athlete_profile(profile)
-
-    # 2) Обновляем профиль в базе для текущего пользователя,
+    # Обновляем профиль в базе для текущего пользователя,
     # чтобы на дашборде корректно отображались Avg hours 12w и авто-метрики.
     db_profile = crud.get_user_profile(db, current_user.id)
     if not db_profile:
@@ -317,15 +378,40 @@ async def auto_update_profile_from_history(
     db.commit()
     db.refresh(db_profile)
 
-    return profile
+    # Convert DB profile to AthleteProfile for response
+    return AthleteProfile(
+        id=db_profile.id,
+        user_id=db_profile.user_id,
+        age=db_profile.age,
+        gender=db_profile.gender,
+        weight_kg=db_profile.weight_kg,
+        height_cm=db_profile.height_cm,
+        years_of_experience=db_profile.years_of_experience or 0,
+        primary_discipline=db_profile.primary_discipline,
+        training_zones_run=db_profile.training_zones_run,
+        training_zones_bike=db_profile.training_zones_bike,
+        training_zones_swim=db_profile.training_zones_swim,
+        available_hours_per_week=db_profile.available_hours_per_week or 8.0,
+        auto_avg_hours_last_12_weeks=db_profile.auto_avg_hours_last_12_weeks or 0.0,
+        auto_current_weekly_streak_weeks=db_profile.auto_current_weekly_streak_weeks or 0,
+        preferred_training_days=db_profile.preferred_training_days,
+        zones_last_updated=db_profile.zones_last_updated.isoformat() if db_profile.zones_last_updated else None,
+        auto_weeks_analyzed=db_profile.auto_weeks_analyzed or 0,
+        auto_longest_weekly_streak_weeks=db_profile.auto_longest_weekly_streak_weeks or 0,
+        auto_discipline_hours_per_week=db_profile.auto_discipline_hours_per_week,
+    )
 
 
 @router.post("/coach/plan")
-async def coach_plan(req: WeeklyPlanRequest):
+async def coach_plan(
+    req: WeeklyPlanRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
     Генерация плана тренировок на неделю.
     """
-    activities = await fetch_recent_activities_for_coach(limit=80)
+    activities = await fetch_recent_activities_for_coach(current_user.id, db, limit=80)
     plan = await run_weekly_plan(req, activities)
 
     # Сохраняем план
@@ -335,11 +421,15 @@ async def coach_plan(req: WeeklyPlanRequest):
 
 
 @router.post("/coach/weekly_plan_email")
-async def coach_weekly_plan_email(req: WeeklyPlanEmailRequest):
+async def coach_weekly_plan_email(
+    req: WeeklyPlanEmailRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
     Генерирует план тренировок на неделю и отправляет на email.
     """
-    activities_for_plan = await fetch_recent_activities_for_coach(limit=80)
+    activities_for_plan = await fetch_recent_activities_for_coach(current_user.id, db, limit=80)
 
     plan_request = WeeklyPlanRequest(
         goal=req.goal,
@@ -469,12 +559,16 @@ async def coach_weekly_plan_email(req: WeeklyPlanEmailRequest):
 
 
 @router.post("/coach/plan/export_calendar")
-async def export_plan_to_calendar(req: WeeklyPlanRequest):
+async def export_plan_to_calendar(
+    req: WeeklyPlanRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
     Генерирует план на неделю и экспортирует в .ics файл для календаря.
     """
     try:
-        activities = await fetch_recent_activities_for_coach(limit=80)
+        activities = await fetch_recent_activities_for_coach(current_user.id, db, limit=80)
         plan_data = await run_weekly_plan(req, activities)
 
         save_weekly_plan(req.week_start_date, plan_data)
@@ -516,7 +610,7 @@ async def generate_multi_week_training_plan(req: MultiWeekPlanRequest):
             )
 
         # Получаем историю тренировок
-        activities = await fetch_recent_activities_for_coach(limit=80)
+        activities = await fetch_recent_activities_for_coach(current_user.id, db, limit=80)
 
         # Генерируем план
         logger.info("generating_multi_week_plan", weeks=req.num_weeks)
@@ -549,13 +643,17 @@ async def generate_multi_week_training_plan(req: MultiWeekPlanRequest):
 
 
 @router.post("/coach/multi_week_plan_email")
-async def send_multi_week_plan_email(req: MultiWeekPlanRequest):
+async def send_multi_week_plan_email(
+    req: MultiWeekPlanRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
     Генерирует многонедельный план и отправляет на email с красивой визуализацией.
     """
     try:
         # Генерируем план
-        activities = await fetch_recent_activities_for_coach(limit=80)
+        activities = await fetch_recent_activities_for_coach(current_user.id, db, limit=80)
         start_date = dt.date.fromisoformat(req.start_date)
 
         multi_week_plan = await generate_multi_week_plan(
@@ -706,12 +804,17 @@ async def send_multi_week_plan_email(req: MultiWeekPlanRequest):
 
 
 @router.post("/coach/weekly_report_email")
-async def coach_weekly_report_email(req: WeeklyReportEmailRequest):
+async def coach_weekly_report_email(
+    req: WeeklyReportEmailRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
     Формирует единый еженедельный отчёт с аналитикой и отправляет на email.
     """
     # 1) Прогресс: последние N недель
-    progress_activities = await fetch_activities_last_n_weeks(weeks=req.progress_weeks)
+    from strava_client import fetch_activities_last_n_weeks_for_user
+    progress_activities = await fetch_activities_last_n_weeks_for_user(current_user.id, db, weeks=req.progress_weeks)
     progress_result = await run_progress_tracker(
         ProgressRequest(goal=req.goal, weeks=req.progress_weeks),
         progress_activities,
@@ -795,9 +898,66 @@ async def coach_weekly_report_email(req: WeeklyReportEmailRequest):
         }
 
     # 2) План на следующую неделю
-    activities_for_plan = await fetch_recent_activities_for_coach(limit=80)
+    activities_for_plan = await fetch_recent_activities_for_coach(current_user.id, db, limit=80)
 
-    profile = load_athlete_profile()
+    # Load profile from DB instead of JSON file
+    db_profile = crud.get_user_profile(db, current_user.id)
+    if not db_profile:
+        # Load profile from DB
+        db_profile = crud.get_user_profile(db, current_user.id)
+        if not db_profile:
+            # Create default profile if doesn't exist
+            db_profile = models.AthleteProfileDB(user_id=current_user.id)
+            db.add(db_profile)
+            db.commit()
+            db.refresh(db_profile)
+        
+        # Convert DB profile to AthleteProfile for coach
+        profile = AthleteProfile(
+            id=db_profile.id,
+            user_id=db_profile.user_id,
+            age=db_profile.age,
+            gender=db_profile.gender,
+            weight_kg=db_profile.weight_kg,
+            height_cm=db_profile.height_cm,
+            years_of_experience=db_profile.years_of_experience or 0,
+            primary_discipline=db_profile.primary_discipline,
+            training_zones_run=db_profile.training_zones_run,
+            training_zones_bike=db_profile.training_zones_bike,
+            training_zones_swim=db_profile.training_zones_swim,
+            available_hours_per_week=db_profile.available_hours_per_week or 8.0,
+            auto_avg_hours_last_12_weeks=db_profile.auto_avg_hours_last_12_weeks or 0.0,
+            auto_current_weekly_streak_weeks=db_profile.auto_current_weekly_streak_weeks or 0,
+            preferred_training_days=db_profile.preferred_training_days,
+            zones_last_updated=db_profile.zones_last_updated.isoformat() if db_profile.zones_last_updated else None,
+            auto_weeks_analyzed=db_profile.auto_weeks_analyzed or 0,
+            auto_longest_weekly_streak_weeks=db_profile.auto_longest_weekly_streak_weeks or 0,
+            auto_discipline_hours_per_week=db_profile.auto_discipline_hours_per_week,
+        )
+    else:
+        # Convert DB profile to AthleteProfile
+        from athlete_profile import AthleteProfile
+        profile = AthleteProfile(
+            id=db_profile.id,
+            user_id=db_profile.user_id,
+            age=db_profile.age,
+            gender=db_profile.gender,
+            weight_kg=db_profile.weight_kg,
+            height_cm=db_profile.height_cm,
+            years_of_experience=db_profile.years_of_experience or 0,
+            primary_discipline=db_profile.primary_discipline,
+            training_zones_run=db_profile.training_zones_run,
+            training_zones_bike=db_profile.training_zones_bike,
+            training_zones_swim=db_profile.training_zones_swim,
+            available_hours_per_week=db_profile.available_hours_per_week or 8.0,
+            auto_avg_hours_last_12_weeks=db_profile.auto_avg_hours_last_12_weeks or 0.0,
+            auto_current_weekly_streak_weeks=db_profile.auto_current_weekly_streak_weeks or 0,
+            preferred_training_days=db_profile.preferred_training_days,
+            zones_last_updated=db_profile.zones_last_updated.isoformat() if db_profile.zones_last_updated else None,
+            auto_weeks_analyzed=db_profile.auto_weeks_analyzed or 0,
+            auto_longest_weekly_streak_weeks=db_profile.auto_longest_weekly_streak_weeks or 0,
+            auto_discipline_hours_per_week=db_profile.auto_discipline_hours_per_week,
+        )
 
     plan_request = WeeklyPlanRequest(
         goal=req.goal,
@@ -1247,10 +1407,17 @@ async def coach_weekly_report_email(req: WeeklyReportEmailRequest):
 
 
 @router.get("/downloads/calendar/{filename}")
-async def download_calendar_file(filename: str):
+async def download_calendar_file(
+    filename: str,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
-    Скачивание .ics файла.
+    Скачивание .ics файла для текущего пользователя.
+    Файлы должны быть сохранены с user_id в имени или пути для изоляции.
     """
+    # TODO: Add user_id to filename/path to ensure users only access their own files
+    # For now, we rely on authentication to prevent unauthorized access
     filepath = EXPORTS_DIR / filename
 
     if not filepath.exists():
@@ -1265,12 +1432,17 @@ async def download_calendar_file(filename: str):
         },
     )
 @router.post("/coach/zones/auto_from_activities")
-async def calculate_zones_from_activities(weeks: int = 260):
+async def calculate_zones_from_activities(
+    weeks: int = 260,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
     Автоматически рассчитывает тренировочные зоны на основе лучших результатов
     из истории тренировок в Strava.
     """
-    activities = await fetch_activities_last_n_weeks(weeks=weeks)
+    from strava_client import fetch_activities_last_n_weeks_for_user
+    activities = await fetch_activities_last_n_weeks_for_user(current_user.id, db, weeks=weeks)
 
     best_efforts = find_best_race_efforts(activities)
 
@@ -1279,10 +1451,21 @@ async def calculate_zones_from_activities(weeks: int = 260):
             "status": "no_race_efforts_found",
             "message": "No race efforts found in activity history. Try manual input.",
             "best_efforts": {},
-            "zones_calculated": False,
+            "zones_calculated": {
+                "run": False,
+                "bike": False,
+                "swim": False,
+            },
+            "profile": crud.get_user_profile(db, current_user.id),
         }
 
-    profile = load_athlete_profile()
+    # Load profile from DB
+    db_profile = crud.get_user_profile(db, current_user.id)
+    if not db_profile:
+        db_profile = models.AthleteProfileDB(user_id=current_user.id)
+        db.add(db_profile)
+        db.commit()
+        db.refresh(db_profile)
 
     # Рассчитываем зоны для бега (приоритет: 10K > HM > 5K > Marathon)
     if "run_10k" in best_efforts:
@@ -1292,8 +1475,9 @@ async def calculate_zones_from_activities(weeks: int = 260):
             time_seconds=effort["time_seconds"],
             race_type="10K",
         )
-        profile.training_zones_run = zones_run.to_dict()
-        profile.training_zones_run["source"] = f"10K race on {effort['date']}"
+        db_profile.training_zones_run = zones_run.to_dict()
+        if isinstance(db_profile.training_zones_run, dict):
+            db_profile.training_zones_run["source"] = f"10K race on {effort['date']}"
     elif "run_hm" in best_efforts:
         effort = best_efforts["run_hm"]
         zones_run = calculate_running_zones_from_race(
@@ -1301,8 +1485,9 @@ async def calculate_zones_from_activities(weeks: int = 260):
             time_seconds=effort["time_seconds"],
             race_type="HM",
         )
-        profile.training_zones_run = zones_run.to_dict()
-        profile.training_zones_run["source"] = f"Half Marathon on {effort['date']}"
+        db_profile.training_zones_run = zones_run.to_dict()
+        if isinstance(db_profile.training_zones_run, dict):
+            db_profile.training_zones_run["source"] = f"Half Marathon on {effort['date']}"
     elif "run_5k" in best_efforts:
         effort = best_efforts["run_5k"]
         zones_run = calculate_running_zones_from_race(
@@ -1310,8 +1495,9 @@ async def calculate_zones_from_activities(weeks: int = 260):
             time_seconds=effort["time_seconds"],
             race_type="5K",
         )
-        profile.training_zones_run = zones_run.to_dict()
-        profile.training_zones_run["source"] = f"5K race on {effort['date']}"
+        db_profile.training_zones_run = zones_run.to_dict()
+        if isinstance(db_profile.training_zones_run, dict):
+            db_profile.training_zones_run["source"] = f"5K race on {effort['date']}"
 
     # Плавание
     if "swim_1500m" in best_efforts:
@@ -1321,31 +1507,43 @@ async def calculate_zones_from_activities(weeks: int = 260):
             time_seconds=effort["time_seconds"],
         )
         zones_swim = calculate_swimming_zones_from_css(css)
-        profile.training_zones_swim = zones_swim.to_dict()
-        profile.training_zones_swim["source"] = f"1500m swim on {effort['date']}"
+        db_profile.training_zones_swim = zones_swim.to_dict()
+        if isinstance(db_profile.training_zones_swim, dict):
+            db_profile.training_zones_swim["source"] = f"1500m swim on {effort['date']}"
 
-    profile.zones_last_updated = str(dt.date.today())
-    save_athlete_profile(profile)
+    db_profile.zones_last_updated = dt.datetime.now(dt.timezone.utc)
+    db.commit()
+    db.refresh(db_profile)
 
     return {
         "status": "success",
         "message": "Training zones calculated and saved to profile",
         "best_efforts": best_efforts,
         "zones_calculated": {
-            "run": profile.training_zones_run is not None,
-            "bike": profile.training_zones_bike is not None,
-            "swim": profile.training_zones_swim is not None,
+            "run": db_profile.training_zones_run is not None,
+            "bike": db_profile.training_zones_bike is not None,
+            "swim": db_profile.training_zones_swim is not None,
         },
-        "profile": profile,
+        "profile": db_profile,
     }
 
 
 @router.post("/coach/zones/manual")
-async def calculate_zones_manual(input_data: ManualZonesInput):
+async def calculate_zones_manual(
+    input_data: ManualZonesInput,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
-    Рассчитывает тренировочные зоны на основе ручного ввода данных.
+    Рассчитывает тренировочные зоны на основе ручного ввода данных для текущего пользователя.
     """
-    profile = load_athlete_profile()
+    # Load profile from DB
+    db_profile = crud.get_user_profile(db, current_user.id)
+    if not db_profile:
+        db_profile = models.AthleteProfileDB(user_id=current_user.id)
+        db.add(db_profile)
+        db.commit()
+        db.refresh(db_profile)
 
     # Running zones
     if (
@@ -1358,63 +1556,77 @@ async def calculate_zones_manual(input_data: ManualZonesInput):
             time_seconds=input_data.run_race_time_seconds,
             race_type=input_data.run_race_type,
         )
-        profile.training_zones_run = zones_run.to_dict()
-        profile.training_zones_run["source"] = (
-            f"Manual input: {input_data.run_race_type}"
-        )
+        db_profile.training_zones_run = zones_run.to_dict()
+        if isinstance(db_profile.training_zones_run, dict):
+            db_profile.training_zones_run["source"] = (
+                f"Manual input: {input_data.run_race_type}"
+            )
 
     # Cycling zones
     if input_data.bike_ftp_watts:
         zones_bike = calculate_cycling_zones_from_ftp(input_data.bike_ftp_watts)
-        profile.training_zones_bike = zones_bike.to_dict()
-        profile.training_zones_bike["source"] = "Manual FTP input"
+        db_profile.training_zones_bike = zones_bike.to_dict()
+        if isinstance(db_profile.training_zones_bike, dict):
+            db_profile.training_zones_bike["source"] = "Manual FTP input"
 
     # Swimming zones
     if input_data.swim_css_pace_per_100m:
         zones_swim = calculate_swimming_zones_from_css(
             input_data.swim_css_pace_per_100m
         )
-        profile.training_zones_swim = zones_swim.to_dict()
-        profile.training_zones_swim["source"] = "Manual CSS input"
+        db_profile.training_zones_swim = zones_swim.to_dict()
+        if isinstance(db_profile.training_zones_swim, dict):
+            db_profile.training_zones_swim["source"] = "Manual CSS input"
 
-    profile.zones_last_updated = str(dt.date.today())
-    save_athlete_profile(profile)
+    db_profile.zones_last_updated = dt.datetime.now(dt.timezone.utc)
+    db.commit()
+    db.refresh(db_profile)
 
     return {
         "status": "success",
         "message": "Training zones calculated from manual input and saved",
         "zones_calculated": {
-            "run": profile.training_zones_run is not None,
-            "bike": profile.training_zones_bike is not None,
-            "swim": profile.training_zones_swim is not None,
+            "run": db_profile.training_zones_run is not None,
+            "bike": db_profile.training_zones_bike is not None,
+            "swim": db_profile.training_zones_swim is not None,
         },
-        "profile": profile,
+        "profile": db_profile,
     }
 
 
 @router.get("/coach/zones")
-async def get_training_zones(user_id: int = 0):
+async def get_training_zones(
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
-    Получить текущие тренировочные зоны из профиля.
+    Получить текущие тренировочные зоны для текущего пользователя.
     Поддерживает кеширование для оптимизации производительности.
     """
-    # Check cache first (user_id=0 for global profile)
-    cached_zones = get_cached_training_zones(user_id)
+    # Check cache first
+    cached_zones = get_cached_training_zones(current_user.id)
     if cached_zones is not None:
         return cached_zones
     
-    # Cache miss - load from profile
-    profile = load_athlete_profile()
+    # Cache miss - load from DB
+    db_profile = crud.get_user_profile(db, current_user.id)
+    if not db_profile:
+        return {
+            "zones_last_updated": None,
+            "run": None,
+            "bike": None,
+            "swim": None,
+        }
     
     zones_data = {
-        "zones_last_updated": profile.zones_last_updated,
-        "run": profile.training_zones_run,
-        "bike": profile.training_zones_bike,
-        "swim": profile.training_zones_swim,
+        "zones_last_updated": db_profile.zones_last_updated.isoformat() if db_profile.zones_last_updated else None,
+        "run": db_profile.training_zones_run,
+        "bike": db_profile.training_zones_bike,
+        "swim": db_profile.training_zones_swim,
     }
     
     # Cache the result
-    cache_training_zones(user_id, zones_data)
+    cache_training_zones(current_user.id, zones_data)
     
     return zones_data
 

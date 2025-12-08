@@ -234,9 +234,14 @@ def cache_activity(db: Session, user_id: int, strava_activity: dict):
     return upsert_activity(db, user_id, strava_activity)
 
 
-def delete_activity_by_strava_id(db: Session, strava_activity_id: str) -> None:
-    """Delete cached activity by Strava activity id."""
-    db.query(ActivityDB).filter(ActivityDB.strava_id == str(strava_activity_id)).delete()
+def delete_activity_by_strava_id(db: Session, user_id: int, strava_activity_id: str) -> None:
+    """Delete cached activity by Strava activity id for specific user."""
+    db.query(ActivityDB).filter(
+        and_(
+            ActivityDB.user_id == user_id,
+            ActivityDB.strava_id == str(strava_activity_id)
+        )
+    ).delete()
     db.commit()
 
 

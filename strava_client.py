@@ -141,9 +141,10 @@ def _persist_tokens(token_data: dict) -> None:
 
 def load_tokens() -> dict:
     """
-    Загружаем токены из файла strava_token.json.
-    Если файла нет, пробуем восстановить их из БД.
+    DEPRECATED: This function uses global tokens from file.
+    Use get_user_tokens(user_id, db) instead for user-specific tokens.
     """
+    logger.warning("load_tokens_deprecated", message="Using deprecated load_tokens(). Use get_user_tokens() instead.")
     if not TOKENS_FILE.exists():
         try:
             persisted = load_state(STRAVA_TOKENS_STATE_KEY)
@@ -157,10 +158,10 @@ def load_tokens() -> dict:
     return json.loads(TOKENS_FILE.read_text(encoding="utf-8"))
 
 
-async def refresh_access_token_if_needed(tokens: dict) -> dict:
+async def refresh_access_token_if_needed(user_id: int, db: Session, tokens: dict) -> dict:
     """
-    Проверяем срок действия access_token.
-    Если истёк — обновляем через refresh_token.
+    Проверяем срок действия access_token для конкретного пользователя.
+    Если истёк — обновляем через refresh_token и сохраняем в БД.
     Strava кладёт expires_at как UNIX timestamp в секундах.
     """
     expires_at = tokens.get("expires_at")
@@ -188,25 +189,29 @@ async def refresh_access_token_if_needed(tokens: dict) -> dict:
         raise RuntimeError(f"Error refreshing Strava token: {resp.text}")
 
     new_tokens = resp.json()
-    # сохраняем обновлённые токены в файл
-    _persist_tokens(new_tokens)
+    # сохраняем обновлённые токены в БД для пользователя
+    from strava_auth import save_user_tokens
+    await save_user_tokens(user_id, db, new_tokens)
+    logger.info("strava_token_refreshed", user_id=user_id)
     return new_tokens
 
 
 async def get_valid_access_token() -> str:
     """
-    Возвращает актуальный access_token:
-    - читает из файла
-    - при необходимости обновляет
+    DEPRECATED: This function uses global tokens from file.
+    Use get_user_tokens(user_id, db) instead for user-specific tokens.
     """
+    logger.warning("get_valid_access_token_deprecated", message="Using deprecated get_valid_access_token(). Use get_user_tokens() instead.")
     tokens = load_tokens()
-    tokens = await refresh_access_token_if_needed(tokens)
-    return tokens["access_token"]
+    # Note: refresh_access_token_if_needed now requires user_id and db
+    # This is a legacy function, so we can't properly refresh here
+    return tokens.get("access_token", "")
 
 
 async def exchange_code_for_token(code: str) -> dict:
     """
-    Обмениваем authorization code от Strava на токены и сохраняем их в файл.
+    Обмениваем authorization code от Strava на токены.
+    Токены должны быть сохранены в БД через save_strava_tokens() после вызова этой функции.
     """
     token_url = "https://www.strava.com/oauth/token"
     data = {
@@ -226,9 +231,10 @@ async def exchange_code_for_token(code: str) -> dict:
         )
 
     token_data = resp.json()
-
-    # Сохраняем токены в файл в UTF-8
-    _persist_tokens(token_data)
+    logger.info("strava_token_exchanged", athlete_id=token_data.get("athlete", {}).get("id"))
+    
+    # NOTE: Tokens should be saved to DB via save_strava_tokens() after this call
+    # We no longer save to file for security reasons
 
     return token_data
 
@@ -270,14 +276,18 @@ def _normalize_activity(a: dict) -> dict:
     }
 
 
-async def fetch_activities(page: int = 1, per_page: int = 50) -> list[dict]:
+async def fetch_activities(
+    user_id: int,
+    db: Session,
+    page: int = 1,
+    per_page: int = 50
+) -> list[dict]:
     """
-    Тянем список активностей (как /strava/activities).
+    Тянем список активностей для конкретного пользователя (как /strava/activities).
     """
-    access_token = await get_valid_access_token()
-
+    tokens = await get_user_tokens(user_id, db)
     url = "https://www.strava.com/api/v3/athlete/activities"
-    headers = {"Authorization": f"Bearer {access_token}"}
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
     params = {
         "page": page,
         "per_page": per_page,
@@ -294,14 +304,18 @@ async def fetch_activities(page: int = 1, per_page: int = 50) -> list[dict]:
     return [_normalize_activity(a) for a in activities_raw]
 
 
-async def fetch_recent_activities_for_coach(limit: int = 80) -> list[dict]:
+async def fetch_recent_activities_for_coach(
+    user_id: int,
+    db: Session,
+    limit: int = 80
+) -> list[dict]:
     """
-    Тянем последние limit тренировок, чтобы отправить их в GPT-коучу.
+    Тянем последние limit тренировок для конкретного пользователя, чтобы отправить их в GPT-коучу.
     """
     try:
-        access_token = await get_valid_access_token()
+        tokens = await get_user_tokens(user_id, db)
         url = "https://www.strava.com/api/v3/athlete/activities"
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
         activities: list[dict] = []
         page = 1
@@ -327,15 +341,16 @@ async def fetch_recent_activities_for_coach(limit: int = 80) -> list[dict]:
                     break  # больше страниц нет
                 page += 1
 
+        logger.info("fetch_recent_activities_for_coach", user_id=user_id, count=len(activities))
         return activities
     except httpx.HTTPError as e:
-        logger.error("strava_network_error", error=str(e))
+        logger.error("strava_network_error", user_id=user_id, error=str(e))
         raise HTTPException(
             status_code=503,
             detail="Unable to connect to Strava. Please try again later."
         )
     except Exception as e:
-        logger.error("unexpected_error_fetching_activities", error=str(e))
+        logger.error("unexpected_error_fetching_activities", user_id=user_id, error=str(e))
         raise HTTPException(
             status_code=500,
             detail="An unexpected error occurred while fetching activities."
@@ -347,89 +362,32 @@ async def fetch_recent_activities_for_coach(limit: int = 80) -> list[dict]:
     retry=retry_if_exception_type(httpx.HTTPError),
     reraise=True,
 )
-async def fetch_activities_last_n_weeks(weeks: int = 8, use_cache: bool = True) -> list[dict]:
+async def fetch_activities_last_n_weeks(
+    user_id: int,
+    db: Session,
+    weeks: int = 8,
+    use_cache: bool = True
+) -> list[dict]:
     """
-    Тянем активности за последние N недель (по дате начала).
+    Тянем активности за последние N недель для конкретного пользователя (по дате начала).
     Автоматически повторяет запрос до 3 раз при ошибках сети.
-    Legacy function - uses global Strava tokens from file.
     """
-    # Check cache first (using "0" as user_id for legacy support)
-    if use_cache:
-        cached = get_cached_strava_activities(user_id=0, weeks=weeks)
-        if cached is not None:
-            logger.info("strava_activities_from_cache_legacy", weeks=weeks, count=len(cached))
-            return cached
-    
-    logger.info("strava_activities_fetch_legacy", weeks=weeks)
-    access_token = await get_valid_access_token()
-    url = "https://www.strava.com/api/v3/athlete/activities"
-    headers = {"Authorization": f"Bearer {access_token}"}
+    # Use the user-specific function
+    return await fetch_activities_last_n_weeks_for_user(user_id, db, weeks, use_cache)
 
-    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(weeks=weeks)
-
-    activities: list[dict] = []
-    page = 1
-    per_page = 50
-    reached_cutoff = False
-
-    async with httpx.AsyncClient() as client:
-        while not reached_cutoff:
-            params = {"page": page, "per_page": per_page}
-            resp = await client.get(url, headers=headers, params=params)
-            if resp.status_code != 200:
-                logger.warning(
-                    "strava_api_error",
-                    status_code=resp.status_code,
-                    page=page,
-                    detail=resp.text[:100],
-                )
-                if resp.status_code == 429:
-                    logger.error("strava_rate_limit_hit")
-                raise httpx.HTTPError(f"Strava API error: {resp.status_code} {resp.text}")
-
-            chunk = resp.json()
-            if not chunk:
-                break
-
-            for a in chunk:
-                raw_start = a.get("start_date")
-                dt_start = None
-                if raw_start:
-                    try:
-                        # Строка типа "2025-03-10T18:12:34Z"
-                        dt_start = dt.datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
-                    except ValueError:
-                        dt_start = None
-
-                if dt_start and dt_start < cutoff:
-                    reached_cutoff = True
-                    break
-
-                activities.append(_normalize_activity(a))
-
-            if reached_cutoff:
-                break
-
-            if len(chunk) < per_page:
-                break  # дальше активностей нет
-
-            page += 1
-    
-    # Cache the results
-    if use_cache and activities:
-        cache_strava_activities(user_id=0, weeks=weeks, activities=activities)
-        logger.info("strava_activities_cached_legacy", weeks=weeks, count=len(activities))
-
-    return activities
-
-async def fetch_activities_between(start_date: dt.date, end_date: dt.date) -> list[dict]:
+async def fetch_activities_between(
+    user_id: int,
+    db: Session,
+    start_date: dt.date,
+    end_date: dt.date
+) -> list[dict]:
     """
-    Тянем активности в диапазоне [start_date, end_date] по start_date.
+    Тянем активности в диапазоне [start_date, end_date] для конкретного пользователя по start_date.
     Используем тот же формат словаря, что и в остальных функциях.
     """
-    access_token = await get_valid_access_token()
+    tokens = await get_user_tokens(user_id, db)
     url = "https://www.strava.com/api/v3/athlete/activities"
-    headers = {"Authorization": f"Bearer {access_token}"}
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
     activities: list[dict] = []
     page = 1
