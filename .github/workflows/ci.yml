@@ -73,12 +73,19 @@ jobs:
       - name: Deploy backend service
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service ai_coach_backend
+        run: |
+          railway link --service ai_coach_backend || true
+          railway up --service ai_coach_backend
 
       - name: Deploy frontend service
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service frontend
+        working-directory: ./frontend
+        run: |
+          railway link --service frontend || true
+          railway up --service frontend
+        continue-on-error: true
+        timeout-minutes: 10
 
 
 

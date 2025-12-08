@@ -1,0 +1,64 @@
+# Railway ignore file - exclude unnecessary files from deployment
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+triathlon_coach.db
+
+# Data files
+data/
+exports/
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+
+# Frontend build artifacts (will be built on Railway)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.turbo/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Backup files
+backup/
+
+# Alembic (keep only necessary files)
+alembic/versions/*.pyc
+
