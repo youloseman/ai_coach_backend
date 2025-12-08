@@ -254,3 +254,15 @@ export interface StravaStatus {
   athlete_id?: number | null;
   expires_at?: number | null;
 }
+
+export interface StravaActivity {
+  id?: number;
+  name: string;
+  sport_type: string;
+  start_date: string;
+  distance_m?: number;
+  moving_time_s?: number;
+  total_elevation_gain_m?: number;
+  average_heartrate?: number;
+  average_speed_m_s?: number;
+}

@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { isAuthenticated, logout } from '@/lib/auth';
 import { profileAPI, goalsAPI, coachAPI, analyticsAPI, stravaAPI } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
-import type { AthleteProfile, Goal, WeeklyPlan, CoachZonesSummary } from '@/types';
+import type { AthleteProfile, Goal, WeeklyPlan, CoachZonesSummary, StravaActivity } from '@/types';
 import { Activity, Calendar, HeartPulse, Target, ClipboardList, LogOut } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -150,11 +150,11 @@ export default function DashboardPage() {
   // Recent activities
   const {
     data: recentActivities,
-  } = useQuery({
+  } = useQuery<StravaActivity[]>({
     queryKey: ['recentActivities'],
     queryFn: async () => {
       const response = await stravaAPI.getActivities(1, 5);
-      return response.activities || [];
+      return (response.activities || []) as StravaActivity[];
     },
     enabled: isAuthenticated(),
   });
@@ -977,7 +977,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {recentActivities.map((activity) => (
+              {recentActivities.map((activity: StravaActivity) => (
                 <ActivityCard key={activity.id} activity={activity} />
               ))}
             </div>
