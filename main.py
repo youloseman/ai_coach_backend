@@ -235,7 +235,7 @@ async def get_current_form_status(
     """
     try:
         # Получаем последние 12 недель для текущего пользователя
-        activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=12)
+        activities = await fetch_activities_last_n_weeks_for_user(current_user.id, db, weeks=12)
         
         if not activities:
             return {
