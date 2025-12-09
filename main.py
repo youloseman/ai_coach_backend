@@ -730,7 +730,12 @@ async def strava_callback(
         logger.info("strava_connected", user_id=current_user.id, athlete_id=athlete_id)
         
         # Return HTML that redirects to frontend
-        frontend_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+        # Use production URL as default, not localhost
+        frontend_url = os.getenv(
+            "FRONTEND_BASE_URL", 
+            "https://frontend-production-8c08.up.railway.app"
+        )
+        logger.info("strava_callback_redirect", frontend_url=frontend_url)
         return HTMLResponse(content=f"""
             <!DOCTYPE html>
             <html>
