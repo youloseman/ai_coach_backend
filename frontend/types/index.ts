@@ -322,7 +322,7 @@ export interface FatigueSignal {
   severity: string;
   message: string;
   description?: string;
-  details: Record<string, any>;
+  details: Record<string, unknown>;
 }
 
 export interface FatigueAnalysis {
