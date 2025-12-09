@@ -82,7 +82,6 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          cd frontend
           railway login --token $RAILWAY_TOKEN || true
           railway link --service frontend || true
           railway up --service frontend
