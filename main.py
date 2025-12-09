@@ -1,5 +1,6 @@
 from typing import Optional
 import base64
+import os
 
 from fastapi import FastAPI, HTTPException, Depends, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
