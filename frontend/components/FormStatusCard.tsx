@@ -1,140 +1,190 @@
-// components/FormStatusCard.tsx
-import { TrendingUp, TrendingDown, Minus, Activity } from 'lucide-react';
+'use client';
 
-interface FormStatusCardProps {
-  formStatus: {
-    status: string;
-    date: string;
-    ctl?: number;
-    atl?: number;
-    tsb?: number;
-    form?: {
-      label?: string;
-      description?: string;
-      recommendation?: string;
-    };
-  } | null;
-  isLoading?: boolean;
-}
+import { useEffect, useState } from 'react';
+import { TrendingUp, TrendingDown, Minus, Activity, RefreshCw } from 'lucide-react';
+import { analyticsAPI } from '@/lib/api';
+import type { FormStatus } from '@/types';
 
-export function FormStatusCard({ formStatus, isLoading }: FormStatusCardProps) {
-  if (isLoading) {
+export default function FormStatusCard() {
+  const [formStatus, setFormStatus] = useState<FormStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadFormStatus = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await analyticsAPI.getFormStatus();
+      setFormStatus(data);
+    } catch (err) {
+      console.error('Failed to load form status:', err);
+      setError('Failed to load form status');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFormStatus();
+  }, []);
+
+  if (loading) {
     return (
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-        <div className="flex items-center justify-center h-32">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500" />
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Current Form
+          </h3>
+        </div>
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (!formStatus) {
+  if (error || !formStatus) {
     return (
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex items-center gap-2 mb-3">
-          <Activity className="w-5 h-5 text-slate-400" />
-          <h2 className="text-sm font-semibold">Current Form</h2>
+          <Activity className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Current Form
+          </h3>
         </div>
-        <p className="text-xs text-slate-400">
-          No form data available. Connect Strava and complete some workouts.
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Connect Strava and sync activities to see your current form status.
         </p>
       </div>
     );
   }
 
-  const getFormColor = (label: string) => {
-    const l = label.toLowerCase();
-    if (l.includes('fresh') || l.includes('optimal')) {
-      return {
-        bg: 'bg-emerald-500/10',
-        border: 'border-emerald-500/30',
-        text: 'text-emerald-400',
-        icon: TrendingUp,
-      };
+  const getFormColor = (color: string) => {
+    switch (color.toLowerCase()) {
+      case 'green':
+        return {
+          bg: 'bg-green-100 dark:bg-green-900/20',
+          text: 'text-green-800 dark:text-green-400',
+          border: 'border-green-300 dark:border-green-700',
+          icon: TrendingUp,
+        };
+      case 'yellow':
+        return {
+          bg: 'bg-yellow-100 dark:bg-yellow-900/20',
+          text: 'text-yellow-800 dark:text-yellow-400',
+          border: 'border-yellow-300 dark:border-yellow-700',
+          icon: Minus,
+        };
+      case 'orange':
+        return {
+          bg: 'bg-orange-100 dark:bg-orange-900/20',
+          text: 'text-orange-800 dark:text-orange-400',
+          border: 'border-orange-300 dark:border-orange-700',
+          icon: TrendingDown,
+        };
+      case 'red':
+        return {
+          bg: 'bg-red-100 dark:bg-red-900/20',
+          text: 'text-red-800 dark:text-red-400',
+          border: 'border-red-300 dark:border-red-700',
+          icon: TrendingDown,
+        };
+      default:
+        return {
+          bg: 'bg-gray-100 dark:bg-gray-700',
+          text: 'text-gray-800 dark:text-gray-300',
+          border: 'border-gray-300 dark:border-gray-600',
+          icon: Minus,
+        };
     }
-    if (l.includes('fatigued') || l.includes('overreaching')) {
-      return {
-        bg: 'bg-red-500/10',
-        border: 'border-red-500/30',
-        text: 'text-red-400',
-        icon: TrendingDown,
-      };
-    }
-    return {
-      bg: 'bg-slate-500/10',
-      border: 'border-slate-500/30',
-      text: 'text-slate-400',
-      icon: Minus,
-    };
   };
 
-  // Safely access form.label with fallback
-  const formLabel = formStatus.form?.label || 'Unknown';
-  const formColor = getFormColor(formLabel);
+  const getTSBColor = (tsb: number) => {
+    if (tsb > 5) return 'text-green-600 dark:text-green-400';
+    if (tsb < -10) return 'text-red-600 dark:text-red-400';
+    return 'text-yellow-600 dark:text-yellow-400';
+  };
+
+  const formColor = getFormColor(formStatus.form.color);
   const FormIcon = formColor.icon;
 
   return (
-    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <Activity className="w-5 h-5 text-sky-400" />
-        <h2 className="text-sm font-semibold">Current Form</h2>
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          Current Form
+        </h3>
+        <button
+          onClick={loadFormStatus}
+          className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          aria-label="Refresh form status"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
       </div>
 
-      <div className="space-y-3">
-        {/* Form status badge */}
-        <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${formColor.border} ${formColor.bg}`}>
-          <FormIcon className={`w-4 h-4 ${formColor.text}`} />
-          <span className={`text-sm font-medium ${formColor.text}`}>
-            {formLabel}
+      <div className="space-y-4">
+        {/* Form Badge */}
+        <div
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${formColor.border} ${formColor.bg}`}
+        >
+          <FormIcon className={`w-5 h-5 ${formColor.text}`} />
+          <span className={`text-base font-semibold ${formColor.text}`}>
+            {formStatus.form.label}
           </span>
         </div>
 
-        {/* TSB value */}
-        <div className="text-xs text-slate-400">
-          TSB: <span className={`font-medium ${formColor.text}`}>
-            {typeof formStatus.tsb === 'number' 
-              ? `${formStatus.tsb > 0 ? '+' : ''}${formStatus.tsb.toFixed(1)}`
-              : 'N/A'}
-          </span>
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center">
+            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
+              Fitness (CTL)
+            </div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              {formStatus.current_ctl.toFixed(1)}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
+              Fatigue (ATL)
+            </div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              {formStatus.current_atl.toFixed(1)}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
+              Form (TSB)
+            </div>
+            <div className={`text-2xl font-bold ${getTSBColor(formStatus.current_tsb)}`}>
+              {formStatus.current_tsb > 0 ? '+' : ''}
+              {formStatus.current_tsb.toFixed(1)}
+            </div>
+          </div>
         </div>
 
         {/* Description */}
-        {formStatus.form?.description && (
-          <p className="text-xs text-slate-300 leading-relaxed">
-            {formStatus.form.description}
-          </p>
-        )}
+        <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+          {formStatus.form.description}
+        </p>
 
         {/* Recommendation */}
-        {formStatus.form?.recommendation && (
-          <div className="pt-2 border-t border-slate-800">
-            <p className="text-xs text-slate-400">
-              <span className="font-medium text-slate-300">Recommendation:</span>{' '}
-              {formStatus.form.recommendation}
-            </p>
-          </div>
-        )}
-
-        {/* Detailed metrics */}
-        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800">
-          <div className="text-center">
-            <div className="text-[10px] text-slate-500 uppercase mb-0.5">Fitness</div>
-            <div className="text-sm font-medium text-sky-400">
-              {typeof formStatus.ctl === 'number' ? formStatus.ctl.toFixed(0) : 'N/A'}
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-[10px] text-slate-500 uppercase mb-0.5">Fatigue</div>
-            <div className="text-sm font-medium text-amber-400">
-              {typeof formStatus.atl === 'number' ? formStatus.atl.toFixed(0) : 'N/A'}
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-[10px] text-slate-500 uppercase mb-0.5">Form</div>
-            <div className={`text-sm font-medium ${formColor.text}`}>
-              {typeof formStatus.tsb === 'number' 
-                ? `${formStatus.tsb > 0 ? '+' : ''}${formStatus.tsb.toFixed(0)}`
-                : 'N/A'}
+        <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-400 p-3 rounded">
+          <div className="flex items-start gap-2">
+            <span className="text-blue-600 dark:text-blue-400 text-lg">💡</span>
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                Recommendation:
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {formStatus.form.recommendation}
+              </p>
             </div>
           </div>
         </div>
@@ -142,6 +192,3 @@ export function FormStatusCard({ formStatus, isLoading }: FormStatusCardProps) {
     </div>
   );
 }
-
-
-

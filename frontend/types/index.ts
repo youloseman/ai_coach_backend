@@ -261,8 +261,123 @@ export interface StravaActivity {
   sport_type: string;
   start_date: string;
   distance_m?: number;
+  distance_meters?: number;
   moving_time_s?: number;
+  moving_time_seconds?: number;
+  elapsed_time_seconds?: number;
   total_elevation_gain_m?: number;
+  total_elevation_gain?: number;
   average_heartrate?: number;
+  max_heartrate?: number;
   average_speed_m_s?: number;
+  average_watts?: number;
+  tss?: number;
+}
+
+// ===== ANALYTICS =====
+
+export interface TrainingLoadAnalysis {
+  status: string;
+  analysis: {
+    current_ctl: number;
+    current_atl: number;
+    current_tsb: number;
+    current_ramp_rate: number;
+    ctl_trend: string;
+    atl_trend: string;
+    tsb_trend: string;
+    ramp_rate_status: string;
+    weekly_tss: Array<{
+      week_start: string;
+      total_tss: number;
+      run_tss: number;
+      bike_tss: number;
+      swim_tss: number;
+    }>;
+    timeline?: Array<{
+      date: string;
+      ctl: number;
+      atl: number;
+      tsb: number;
+    }>;
+  };
+}
+
+export interface FormStatus {
+  status: string;
+  current_date: string;
+  current_ctl: number;
+  current_atl: number;
+  current_tsb: number;
+  form: {
+    label: string;
+    color: string;
+    description: string;
+    recommendation: string;
+  };
+}
+
+export interface FatigueSignal {
+  type: string;
+  severity: string;
+  message: string;
+  description?: string;
+  details: Record<string, any>;
+}
+
+export interface FatigueAnalysis {
+  status: string;
+  overall_fatigue_level: string;
+  fatigue_score: number;
+  signals: FatigueSignal[];
+  recommendations: string[];
+  metrics: {
+    avg_hr_drift?: number;
+    chronic_high_hr_days?: number;
+    pace_decline?: number;
+    days_since_rest?: number;
+  };
+}
+
+export interface RacePrediction {
+  status: string;
+  prediction: {
+    goal_race_type: string;
+    goal_time: string;
+    predicted_time: string;
+    predicted_seconds: number;
+    goal_seconds: number;
+    probability_of_success: number;
+    current_fitness_level: string;
+    recommendations: string[];
+    pacing_strategy?: {
+      split_type: string;
+      splits: Array<{
+        segment: string;
+        target_pace: string;
+        target_time: string;
+      }>;
+    };
+  };
+}
+
+export interface AllRacePredictions {
+  status: string;
+  sport: string;
+  predictions: Array<{
+    race_type: string;
+    predicted_time: string;
+    predicted_time_seconds: number;
+    confidence: string;
+    pace_per_km?: string;
+    based_on?: {
+      effort_type: string;
+      time: string;
+      date: string;
+    };
+  }>;
+  best_efforts?: Record<string, {
+    time?: string;
+    formatted_time?: string;
+  }>;
 }

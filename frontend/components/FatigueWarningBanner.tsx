@@ -1,120 +1,133 @@
-// components/FatigueWarningBanner.tsx
-import { AlertTriangle, Info } from 'lucide-react';
+'use client';
 
-interface FatigueWarningBannerProps {
-  fatigueData: {
-    status: string;
-    overall_fatigue_level: string;
-    fatigue_score: number;
-    signals: Array<{
-      type: string;
-      severity: string;
-      description: string;
-    }>;
-    recommendations: string[];
-  } | null;
-  onDismiss?: () => void;
-}
+import { useEffect, useState } from 'react';
+import { AlertTriangle, X } from 'lucide-react';
+import { analyticsAPI } from '@/lib/api';
+import type { FatigueAnalysis } from '@/types';
 
-export function FatigueWarningBanner({ fatigueData, onDismiss }: FatigueWarningBannerProps) {
+export default function FatigueWarningBanner() {
+  const [fatigueData, setFatigueData] = useState<FatigueAnalysis | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    const loadFatigueAnalysis = async () => {
+      try {
+        setLoading(true);
+        const data = await analyticsAPI.getFatigueAnalysis(4);
+        setFatigueData(data);
+      } catch (err) {
+        console.error('Failed to load fatigue analysis:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadFatigueAnalysis();
+  }, []);
+
+  // Don't show anything while loading
+  if (loading) {
+    return null;
+  }
+
+  // Don't show if dismissed
+  if (dismissed) {
+    return null;
+  }
+
+  // Don't show if no data or not high/critical fatigue
   if (!fatigueData || fatigueData.status !== 'success') {
     return null;
   }
 
-  const levelStr = fatigueData.overall_fatigue_level;
-  if (!levelStr || typeof levelStr !== 'string') {
-    return null;
-  }
-  const level = levelStr.toLowerCase();
-  
-  // Only show banner for elevated or high fatigue
-  if (level === 'low' || level === 'normal') {
+  const level = fatigueData.overall_fatigue_level.toUpperCase();
+  if (level !== 'HIGH' && level !== 'CRITICAL') {
     return null;
   }
 
-  const getAlertStyle = () => {
-    if (level === 'high' || level === 'critical') {
-      return {
-        bg: 'bg-red-500/10',
-        border: 'border-red-500/30',
-        text: 'text-red-400',
-        icon: AlertTriangle,
-      };
-    }
-    if (level === 'elevated' || level === 'moderate') {
-      return {
-        bg: 'bg-amber-500/10',
-        border: 'border-amber-500/30',
-        text: 'text-amber-400',
-        icon: Info,
-      };
-    }
-    return {
-      bg: 'bg-slate-500/10',
-      border: 'border-slate-500/30',
-      text: 'text-slate-400',
-      icon: Info,
-    };
-  };
-
-  const style = getAlertStyle();
-  const Icon = style.icon;
+  const isCritical = level === 'CRITICAL';
 
   return (
-    <div className={`${style.bg} border ${style.border} rounded-xl p-4`}>
+    <div
+      className={`${
+        isCritical
+          ? 'bg-red-100 dark:bg-red-900/20 border-l-4 border-red-400'
+          : 'bg-orange-100 dark:bg-orange-900/20 border-l-4 border-orange-400'
+      } rounded-lg p-4 mb-6`}
+    >
       <div className="flex items-start gap-3">
-        <Icon className={`w-5 h-5 ${style.text} flex-shrink-0 mt-0.5`} />
-        
+        <AlertTriangle
+          className={`w-6 h-6 flex-shrink-0 mt-0.5 ${
+            isCritical
+              ? 'text-red-600 dark:text-red-400'
+              : 'text-orange-600 dark:text-orange-400'
+          }`}
+        />
+
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-2">
-            <div>
-              <h3 className={`text-sm font-semibold ${style.text} mb-1`}>
-                {level === 'high' || level === 'critical' 
-                  ? '⚠️ High Fatigue Detected' 
-                  : '⚡ Elevated Fatigue'}
-              </h3>
-              <p className="text-xs text-slate-300">
-                Fatigue score: <span className={`font-medium ${style.text}`}>
-                  {fatigueData.fatigue_score}/100
-                </span>
-              </p>
-            </div>
-            {onDismiss && (
-              <button
-                onClick={onDismiss}
-                className="text-slate-500 hover:text-slate-300 text-xs px-2 py-1"
-              >
-                ✕
-              </button>
-            )}
+            <h3
+              className={`text-base font-bold ${
+                isCritical
+                  ? 'text-red-900 dark:text-red-300'
+                  : 'text-orange-900 dark:text-orange-300'
+              }`}
+            >
+              ⚠️ {isCritical ? 'Critical' : 'High'} Fatigue Warning
+            </h3>
+            <button
+              onClick={() => setDismissed(true)}
+              className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+              aria-label="Dismiss warning"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
-          {/* Signals */}
+          <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+            Fatigue Score: <span className="font-bold">{fatigueData.fatigue_score.toFixed(1)}/100</span>
+          </p>
+
+          {/* Detected Issues */}
           {fatigueData.signals && fatigueData.signals.length > 0 && (
-            <div className="mb-3 space-y-1">
-              {fatigueData.signals.slice(0, 3).map((signal, idx) => (
-                <div key={idx} className="text-xs text-slate-300 flex items-start gap-1.5">
-                  <span className="text-slate-500 mt-0.5">•</span>
-                  <span>{signal.description}</span>
-                </div>
-              ))}
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                Detected Issues:
+              </p>
+              <ul className="space-y-1">
+                {fatigueData.signals.map((signal, idx) => (
+                  <li key={idx} className="text-sm text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                    <span className="text-gray-500">•</span>
+                    <span>{signal.message || signal.description}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
           {/* Recommendations */}
           {fatigueData.recommendations && fatigueData.recommendations.length > 0 && (
-            <div className="pt-2 border-t border-slate-700/50">
-              <div className="text-[10px] text-slate-500 uppercase mb-1">
-                Recommendations
-              </div>
-              <div className="space-y-1">
-                {fatigueData.recommendations.slice(0, 2).map((rec, idx) => (
-                  <div key={idx} className="text-xs text-slate-300 flex items-start gap-1.5">
-                    <span className={style.text}>→</span>
+            <div className={`${
+              isCritical
+                ? 'bg-red-50 dark:bg-red-900/40'
+                : 'bg-orange-50 dark:bg-orange-900/40'
+            } rounded-lg p-3`}>
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                Recommendations:
+              </p>
+              <ul className="space-y-1">
+                {fatigueData.recommendations.map((rec, idx) => (
+                  <li key={idx} className="text-sm text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                    <span className={`${
+                      isCritical
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-orange-600 dark:text-orange-400'
+                    }`}>→</span>
                     <span>{rec}</span>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
         </div>
@@ -122,6 +135,3 @@ export function FatigueWarningBanner({ fatigueData, onDismiss }: FatigueWarningB
     </div>
   );
 }
-
-
-
