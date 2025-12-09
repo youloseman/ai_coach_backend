@@ -45,7 +45,12 @@ export const PerformanceChart = ({ data }: PerformanceChartProps) => {
               month: 'long',
               day: 'numeric'
             })}
-            formatter={(value: number | undefined) => typeof value === 'number' ? value.toFixed(1) : 'N/A'}
+            formatter={(value: any) => {
+              if (typeof value === 'number' && !isNaN(value)) {
+                return value.toFixed(1);
+              }
+              return 'N/A';
+            }}
             contentStyle={{
               backgroundColor: '#ffffff',
               border: '1px solid #e5e7eb',
