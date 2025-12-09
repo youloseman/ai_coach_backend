@@ -183,7 +183,14 @@ export default function CoachProfilePage() {
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-sm font-semibold">Strava connection</h2>
             <a
-              href={`${API_URL}/`}
+              href={(() => {
+                const token = getAuthToken();
+                if (!token) {
+                  return '#';
+                }
+                const state = btoa(token);
+                return `${API_URL}/auth/strava/login?state=${encodeURIComponent(state)}`;
+              })()}
               target="_blank"
               rel="noreferrer"
               className="px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-[11px]"

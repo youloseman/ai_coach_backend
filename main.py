@@ -570,6 +570,29 @@ async def root():
     """)
 
 
+@app.get("/auth/strava/login")
+async def strava_login(
+    state: Optional[str] = None,
+):
+    """
+    Редиректит пользователя на Strava OAuth с state параметром (JWT token).
+    """
+    from fastapi.responses import RedirectResponse
+    
+    auth_url = (
+        f"https://www.strava.com/oauth/authorize"
+        f"?client_id={STRAVA_CLIENT_ID}"
+        f"&redirect_uri={STRAVA_REDIRECT_URI}"
+        f"&response_type=code"
+        f"&scope=read,activity:read_all"
+    )
+    
+    if state:
+        auth_url += f"&state={state}"
+    
+    return RedirectResponse(url=auth_url, status_code=302)
+
+
 @app.get("/auth/strava/callback")
 async def strava_callback(
     request: Request,
