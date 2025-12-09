@@ -5,9 +5,9 @@ interface FormStatusCardProps {
   formStatus: {
     status: string;
     date: string;
-    ctl: number;
-    atl: number;
-    tsb: number;
+    ctl?: number;
+    atl?: number;
+    tsb?: number;
     form?: {
       label?: string;
       description?: string;
@@ -92,7 +92,9 @@ export function FormStatusCard({ formStatus, isLoading }: FormStatusCardProps) {
         {/* TSB value */}
         <div className="text-xs text-slate-400">
           TSB: <span className={`font-medium ${formColor.text}`}>
-            {formStatus.tsb > 0 ? '+' : ''}{formStatus.tsb.toFixed(1)}
+            {typeof formStatus.tsb === 'number' 
+              ? `${formStatus.tsb > 0 ? '+' : ''}${formStatus.tsb.toFixed(1)}`
+              : 'N/A'}
           </span>
         </div>
 
@@ -118,19 +120,21 @@ export function FormStatusCard({ formStatus, isLoading }: FormStatusCardProps) {
           <div className="text-center">
             <div className="text-[10px] text-slate-500 uppercase mb-0.5">Fitness</div>
             <div className="text-sm font-medium text-sky-400">
-              {formStatus.ctl.toFixed(0)}
+              {typeof formStatus.ctl === 'number' ? formStatus.ctl.toFixed(0) : 'N/A'}
             </div>
           </div>
           <div className="text-center">
             <div className="text-[10px] text-slate-500 uppercase mb-0.5">Fatigue</div>
             <div className="text-sm font-medium text-amber-400">
-              {formStatus.atl.toFixed(0)}
+              {typeof formStatus.atl === 'number' ? formStatus.atl.toFixed(0) : 'N/A'}
             </div>
           </div>
           <div className="text-center">
             <div className="text-[10px] text-slate-500 uppercase mb-0.5">Form</div>
             <div className={`text-sm font-medium ${formColor.text}`}>
-              {formStatus.tsb > 0 ? '+' : ''}{formStatus.tsb.toFixed(0)}
+              {typeof formStatus.tsb === 'number' 
+                ? `${formStatus.tsb > 0 ? '+' : ''}${formStatus.tsb.toFixed(0)}`
+                : 'N/A'}
             </div>
           </div>
         </div>

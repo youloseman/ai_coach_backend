@@ -122,11 +122,12 @@ if FRONTEND_RAILWAY_URL:
 # Railway URLs follow pattern: https://<service-name>-<hash>.up.railway.app
 allowed_origins.append("https://*.up.railway.app")
 
+# CORS configuration - allow all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now (can restrict later)
+    allow_origins=["*"],  # Allow all origins
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
