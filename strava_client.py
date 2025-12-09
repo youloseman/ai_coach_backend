@@ -357,10 +357,6 @@ async def fetch_recent_activities_for_coach(
     except Exception as e:
         logger.error("strava_api_error", user_id=user_id, error=str(e))
         return []  # Return empty list instead of raising error
-        raise HTTPException(
-            status_code=500,
-            detail="An unexpected error occurred while fetching activities."
-        )
 
 @retry(
     stop=stop_after_attempt(3),
