@@ -72,10 +72,26 @@ except Exception as e:
 app = FastAPI(title="AI Triathlon Coach API")
 
 # CORS middleware MUST be added BEFORE rate limiting
-# CORS configuration - allow all origins
+FRONTEND_BASE_URL = os.getenv(
+    "FRONTEND_BASE_URL",
+    "https://frontend-production-8c08.up.railway.app",
+)
+FRONTEND_RAILWAY_URL = os.getenv("FRONTEND_RAILWAY_URL", "")
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "https://frontend-production-8c08.up.railway.app",
+]
+if FRONTEND_BASE_URL and FRONTEND_BASE_URL not in allowed_origins:
+    allowed_origins.append(FRONTEND_BASE_URL)
+if FRONTEND_RAILWAY_URL and FRONTEND_RAILWAY_URL not in allowed_origins:
+    allowed_origins.append(FRONTEND_RAILWAY_URL)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
