@@ -5,7 +5,7 @@ import { AlertTriangle, X } from 'lucide-react';
 import { analyticsAPI } from '@/lib/api';
 import type { FatigueAnalysis } from '@/types';
 
-export default function FatigueWarningBanner() {
+export function FatigueWarningBanner() {
   const [fatigueData, setFatigueData] = useState<FatigueAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(false);

@@ -5,7 +5,7 @@ import { TrendingUp, TrendingDown, Minus, Activity, RefreshCw } from 'lucide-rea
 import { analyticsAPI } from '@/lib/api';
 import type { FormStatus } from '@/types';
 
-export default function FormStatusCard() {
+export function FormStatusCard() {
   const [formStatus, setFormStatus] = useState<FormStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

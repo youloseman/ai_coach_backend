@@ -5,7 +5,7 @@ import { Trophy, Target, RefreshCw } from 'lucide-react';
 import { goalsAPI, analyticsAPI } from '@/lib/api';
 import type { Goal, RacePrediction } from '@/types';
 
-export default function RacePredictionCard() {
+export function RacePredictionCard() {
   const [prediction, setPrediction] = useState<RacePrediction | null>(null);
   const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null);
   const [loading, setLoading] = useState(true);
