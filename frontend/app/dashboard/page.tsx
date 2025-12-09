@@ -122,43 +122,6 @@ export default function DashboardPage() {
     enabled: isAuthenticated(),
   });
 
-  // Form status
-  const {
-    data: formStatus,
-    isLoading: formStatusLoading,
-  } = useQuery({
-    queryKey: ['formStatus'],
-    queryFn: async () => {
-      return await analyticsAPI.getFormStatus();
-    },
-    enabled: isAuthenticated(),
-  });
-
-  // Fatigue analysis
-  const {
-    data: fatigueData,
-  } = useQuery({
-    queryKey: ['fatigueAnalysis'],
-    queryFn: async () => {
-      return await analyticsAPI.getFatigueAnalysis(4);
-    },
-    enabled: isAuthenticated(),
-  });
-
-  // Race predictions
-  const {
-    data: racePredictions,
-    isLoading: predictionsLoading,
-  } = useQuery({
-    queryKey: ['racePredictions'],
-    queryFn: async () => {
-      return await analyticsAPI.getAllPredictions('run', 12);
-    },
-    enabled: isAuthenticated(),
-  });
-
-  const [showFatigueBanner, setShowFatigueBanner] = useState(true);
-
   useEffect(() => {
     // Validate token on mount
     const token = getAuthToken();
@@ -646,12 +609,7 @@ export default function DashboardPage() {
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
         {/* Fatigue Warning */}
-        {showFatigueBanner && fatigueData && (
-          <FatigueWarningBanner
-            fatigueData={fatigueData.fatigue_analysis || fatigueData}
-            onDismiss={() => setShowFatigueBanner(false)}
-          />
-        )}
+        <FatigueWarningBanner />
 
         {/* Performance chart */}
         <section className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
@@ -724,9 +682,9 @@ export default function DashboardPage() {
 
         {/* Form Status, Injury Risk, Race Predictions & Weekly Plan */}
         <section className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
-          <FormStatusCard formStatus={formStatus} isLoading={formStatusLoading} />
+          <FormStatusCard />
           <InjuryRiskCard />
-          <RacePredictionCard predictions={racePredictions} isLoading={predictionsLoading} />
+          <RacePredictionCard />
           <div className="lg:hidden xl:block">
             <WeeklyPlanCompact />
           </div>
