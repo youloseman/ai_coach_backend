@@ -8,6 +8,3 @@ healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 
-[[services]]
-name = "frontend"
-
