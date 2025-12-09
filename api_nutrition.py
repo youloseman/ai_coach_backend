@@ -3,6 +3,7 @@ Nutrition API endpoints for triathletes.
 Provides daily nutrition targets, race day fueling plans, and recovery nutrition.
 """
 from typing import Optional
+import datetime as dt
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -19,7 +20,7 @@ from nutrition import (
 )
 
 
-router = APIRouter()
+router = APIRouter(prefix="/nutrition", tags=["nutrition"])
 
 
 # ===== REQUEST/RESPONSE MODELS =====
@@ -157,6 +158,51 @@ async def get_targets(
     )
 
 
+@router.put("/targets", response_model=NutritionTargetsResponse)
+async def update_targets(
+    request: NutritionTargetsResponse,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update saved nutrition targets. Creates targets if missing.
+    """
+    existing = db.query(models.NutritionTargetDB).filter(
+        models.NutritionTargetDB.user_id == current_user.id
+    ).first()
+
+    if not existing:
+        existing = models.NutritionTargetDB(user_id=current_user.id)
+        db.add(existing)
+
+    existing.daily_calories = request.calories
+    existing.daily_carbs_grams = request.carbs_grams
+    existing.daily_protein_grams = request.protein_grams
+    existing.daily_fat_grams = request.fat_grams
+    db.commit()
+
+    total_calories = request.calories or 0
+    breakdown = {
+        "carbs_percent": round((request.carbs_grams * 4 / total_calories) * 100, 1)
+        if total_calories > 0
+        else 0,
+        "protein_percent": round((request.protein_grams * 4 / total_calories) * 100, 1)
+        if total_calories > 0
+        else 0,
+        "fat_percent": round((request.fat_grams * 9 / total_calories) * 100, 1)
+        if total_calories > 0
+        else 0,
+    }
+
+    return NutritionTargetsResponse(
+        calories=request.calories,
+        carbs_grams=request.carbs_grams,
+        protein_grams=request.protein_grams,
+        fat_grams=request.fat_grams,
+        breakdown=breakdown,
+    )
+
+
 # ===== RACE FUELING ENDPOINTS =====
 
 @router.post("/race-fueling", response_model=dict)
@@ -245,4 +291,72 @@ async def list_race_fueling_plans(
         }
         for p in plans
     ]
+
+
+@router.get("/plans", response_model=list)
+async def list_nutrition_plans(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Return saved nutrition plans (daily/race).
+    """
+    plans = (
+        db.query(models.NutritionPlanDB)
+        .filter(models.NutritionPlanDB.user_id == current_user.id)
+        .order_by(models.NutritionPlanDB.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": p.id,
+            "plan_type": p.plan_type,
+            "race_type": p.race_type,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "notes": p.notes,
+        }
+        for p in plans
+    ]
+
+
+@router.post("/generate", response_model=dict)
+async def generate_daily_plan(
+    goal: str = "performance",
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate a lightweight daily nutrition plan from saved targets.
+    """
+    targets = db.query(models.NutritionTargetDB).filter(
+        models.NutritionTargetDB.user_id == current_user.id
+    ).first()
+
+    if not targets or not targets.daily_calories:
+        raise HTTPException(status_code=400, detail="Set nutrition targets first.")
+
+    plan = {
+        "plan_type": "daily",
+        "goal": goal,
+        "daily_calories": targets.daily_calories,
+        "meals": [
+            {"name": "Breakfast", "calories": round(targets.daily_calories * 0.25, 1)},
+            {"name": "Lunch", "calories": round(targets.daily_calories * 0.35, 1)},
+            {"name": "Dinner", "calories": round(targets.daily_calories * 0.3, 1)},
+            {"name": "Snacks", "calories": round(targets.daily_calories * 0.1, 1)},
+        ],
+        "created_at": dt.datetime.utcnow().isoformat(),
+    }
+
+    db_plan = models.NutritionPlanDB(
+        user_id=current_user.id,
+        plan_type="daily",
+        daily_meals=plan["meals"],
+        notes=f"Goal: {goal}",
+    )
+    db.add(db_plan)
+    db.commit()
+
+    return {"status": "ok", "plan": plan}
 

@@ -94,10 +94,10 @@ export function WeeklyPlanCompact() {
 
       <div className="mt-2 pt-2 border-t border-slate-800">
         <a
-          href="/coach"
+          href="/plans"
           className="text-[10px] text-sky-400 hover:text-sky-300 underline"
         >
-          View Full →
+          View Full Plan →
         </a>
       </div>
     </div>

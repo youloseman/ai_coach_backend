@@ -19,7 +19,8 @@ from segment_sync import (
 )
 from strava_client import fetch_activities_last_n_weeks_for_user
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+# Use root-level paths so frontend can call /segments/... without /analytics prefix
+router = APIRouter(tags=["analytics"])
 
 
 # ===== SCHEMAS =====
@@ -108,6 +109,19 @@ async def get_user_segments(
     return segments
 
 
+@router.get("/segments/tracked", response_model=List[SegmentResponse])
+async def get_tracked_segments(
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Alias for tracked segments (segments with at least one effort).
+    """
+    segments = crud.get_user_segments(db, current_user.id, limit=limit)
+    return segments
+
+
 @router.get("/segment-efforts", response_model=List[SegmentEffortResponse])
 async def get_user_segment_efforts(
     segment_id: Optional[int] = None,
@@ -174,6 +188,88 @@ async def get_user_segment_prs(
         })
     
     return result
+
+
+@router.get("/segments/personal_records", response_model=List[SegmentEffortResponse])
+async def get_segment_personal_records(
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Personal records on segments (alias for PRs endpoint).
+    """
+    return await get_user_segment_prs(limit=limit, current_user=current_user, db=db)
+
+
+class TrackSegmentRequest(BaseModel):
+    strava_segment_id: str
+    name: str
+    activity_type: str = "Run"
+    distance_meters: float
+    city: Optional[str] = None
+    country: Optional[str] = None
+
+
+@router.post("/segments/track")
+async def track_segment(
+    req: TrackSegmentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Manually track a Strava segment by ID. If it already exists, returns it.
+    """
+    existing = db.query(SegmentDB).filter(SegmentDB.strava_segment_id == req.strava_segment_id).first()
+    if not existing:
+        segment = SegmentDB(
+            strava_segment_id=req.strava_segment_id,
+            name=req.name,
+            activity_type=req.activity_type,
+            distance_meters=req.distance_meters,
+            city=req.city,
+            country=req.country,
+            athlete_count=0,
+            effort_count=0,
+        )
+        db.add(segment)
+        db.commit()
+        db.refresh(segment)
+        existing = segment
+
+    return {
+        "status": "ok",
+        "segment": {
+            "id": existing.id,
+            "strava_segment_id": existing.strava_segment_id,
+            "name": existing.name,
+            "activity_type": existing.activity_type,
+            "distance_meters": existing.distance_meters,
+            "city": existing.city,
+            "country": existing.country,
+        },
+    }
+
+
+@router.get("/segments/search", response_model=List[SegmentResponse])
+async def search_segments(
+    query: str,
+    limit: int = 20,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Simple name search over stored segments.
+    """
+    q = f"%{query.lower()}%"
+    segments = (
+        db.query(SegmentDB)
+        .filter(SegmentDB.name.ilike(q))
+        .order_by(SegmentDB.star_count.desc().nullslast())
+        .limit(limit)
+        .all()
+    )
+    return segments
 
 
 # ===== PERSONAL RECORD ENDPOINTS =====

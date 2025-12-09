@@ -417,6 +417,26 @@ export const nutritionAPI = {
     const response = await api.get('/nutrition/targets');
     return response.data;
   },
+
+  updateTargets: async (payload: {
+    calories: number;
+    carbs_grams: number;
+    protein_grams: number;
+    fat_grams: number;
+  }) => {
+    const response = await api.put('/nutrition/targets', payload);
+    return response.data;
+  },
+
+  getPlans: async () => {
+    const response = await api.get('/nutrition/plans');
+    return response.data;
+  },
+
+  generateDailyPlan: async (goal = 'performance') => {
+    const response = await api.post('/nutrition/generate', null, { params: { goal } });
+    return response.data;
+  },
   
   generateRaceFueling: async (payload: {
     race_type: string;
@@ -445,6 +465,10 @@ export const performanceAPI = {
     });
     return response.data;
   },
+  getTrackedSegments: async (limit = 50) => {
+    const response = await api.get('/segments/tracked', { params: { limit } });
+    return response.data;
+  },
   
   getSegmentEfforts: async (filters?: {
     segment_id?: number;
@@ -461,6 +485,28 @@ export const performanceAPI = {
     const response = await api.get('/segment-prs', {
       params: { limit }
     });
+    return response.data;
+  },
+
+  getSegmentPersonalRecords: async (limit = 50) => {
+    const response = await api.get('/segments/personal_records', { params: { limit } });
+    return response.data;
+  },
+
+  searchSegments: async (query: string, limit = 20) => {
+    const response = await api.get('/segments/search', { params: { query, limit } });
+    return response.data;
+  },
+
+  trackSegment: async (payload: {
+    strava_segment_id: string;
+    name: string;
+    activity_type?: string;
+    distance_meters: number;
+    city?: string;
+    country?: string;
+  }) => {
+    const response = await api.post('/segments/track', payload);
     return response.data;
   },
   
@@ -531,6 +577,20 @@ export const zonesAPI = {
 export const weeklyPlanAPI = {
   getCurrent: async () => {
     const response = await api.get('/coach/weekly_plan');
+    return response.data;
+  },
+  getHistory: async () => {
+    const response = await api.get('/coach/plans/history');
+    return response.data;
+  },
+  generate: async (payload: WeeklyPlanRequestPayload) => {
+    const response = await api.post('/coach/generate_plan', payload);
+    return response.data;
+  },
+  completeWorkout: async (workoutId: string, weekStartDate?: string) => {
+    const response = await api.put(`/coach/plan/workout/${workoutId}/complete`, null, {
+      params: { week_start_date: weekStartDate },
+    });
     return response.data;
   },
 };

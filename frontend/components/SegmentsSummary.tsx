@@ -27,7 +27,7 @@ export function SegmentsSummary() {
           <h2 className="text-sm font-semibold">Recent PRs</h2>
         </div>
         <a
-          href="/coach"
+          href="/segments"
           className="text-[11px] text-sky-400 hover:text-sky-300 underline"
         >
           View All Segments →

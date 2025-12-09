@@ -29,7 +29,7 @@ export function NutritionQuickStats() {
           <h2 className="text-sm font-semibold">Daily Targets</h2>
         </div>
         <a
-          href="/coach"
+          href="/nutrition"
           className="text-[11px] text-sky-400 hover:text-sky-300 underline"
         >
           Manage →

@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 from typing import Optional, List
 from pathlib import Path
 
@@ -619,6 +620,80 @@ async def get_weekly_plan_preview(
     except Exception as e:
         logger.error("weekly_plan_preview_error", error=str(e))
         raise HTTPException(status_code=500, detail="Unable to load weekly plan")
+
+
+@router.get("/coach/plans/history")
+async def get_plan_history():
+    """
+    Returns a simple history of saved weekly plans from data/plans.
+    """
+    plans_dir = Path(__file__).parent / "data" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    history = []
+    for path in sorted(plans_dir.glob("*.json"), reverse=True):
+        history.append(
+            {
+                "week_start_date": path.stem,
+                "filename": path.name,
+            }
+        )
+    return {"plans": history}
+
+
+@router.post("/coach/generate_plan")
+async def generate_plan_alias(
+    req: WeeklyPlanRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
+    """
+    Alias for /coach/plan to match frontend expectation.
+    """
+    return await coach_plan(req=req, current_user=current_user, db=db)
+
+
+@router.put("/coach/plan/workout/{workout_id}/complete")
+async def complete_workout(
+    workout_id: str,
+    week_start_date: Optional[str] = None,
+):
+    """
+    Marks a workout as completed in the stored weekly plan.
+    If the workout cannot be found, responds with ok to keep UX smooth.
+    """
+    plans_dir = Path(__file__).parent / "data" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+
+    # Choose plan file
+    if week_start_date:
+        target_path = plans_dir / f"{week_start_date}.json"
+    else:
+        # default to current week
+        today = dt.date.today()
+        week_start = today - dt.timedelta(days=today.weekday())
+        target_path = plans_dir / f"{week_start}.json"
+
+    if not target_path.exists():
+        return {"status": "ok", "updated": False, "message": "Plan file not found"}
+
+    try:
+        data = json.loads(target_path.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+
+    days = data.get("days", [])
+    updated = False
+    for day in days:
+        if str(day.get("id") or day.get("workout_id") or day.get("title")) == str(workout_id):
+            day["completed"] = True
+            updated = True
+            break
+
+    if updated:
+        data["days"] = days
+        target_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {"status": "ok", "updated": updated}
 
 
 @router.post("/coach/multi_week_plan")
