@@ -12,6 +12,14 @@ type NutritionTargets = {
   breakdown?: Record<string, number>;
 };
 
+type NutritionPlan = {
+  id: number;
+  plan_type: string;
+  race_type?: string;
+  created_at?: string;
+  notes?: string;
+};
+
 export default function NutritionPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<NutritionTargets>({
@@ -27,18 +35,30 @@ export default function NutritionPage() {
     retry: 0,
   });
 
-  const { data: plans, isLoading: plansLoading, isError: plansError } = useQuery<any>({
+  const { data: plans, isLoading: plansLoading, isError: plansError } = useQuery<NutritionPlan[]>({
     queryKey: ['nutritionPlans'],
     queryFn: nutritionAPI.getPlans,
   });
 
+  // Update form when targets load, but avoid setState in effect
   useEffect(() => {
     if (targets) {
-      setForm({
-        calories: targets.calories || 0,
-        carbs_grams: targets.carbs_grams || 0,
-        protein_grams: targets.protein_grams || 0,
-        fat_grams: targets.fat_grams || 0,
+      // Use functional update to avoid cascading renders
+      setForm((prev) => {
+        if (
+          prev.calories === (targets.calories || 0) &&
+          prev.carbs_grams === (targets.carbs_grams || 0) &&
+          prev.protein_grams === (targets.protein_grams || 0) &&
+          prev.fat_grams === (targets.fat_grams || 0)
+        ) {
+          return prev; // No change needed
+        }
+        return {
+          calories: targets.calories || 0,
+          carbs_grams: targets.carbs_grams || 0,
+          protein_grams: targets.protein_grams || 0,
+          fat_grams: targets.fat_grams || 0,
+        };
       });
     }
   }, [targets]);
@@ -85,22 +105,25 @@ export default function NutritionPage() {
               { key: 'protein_grams', label: 'Protein (g)' },
               { key: 'carbs_grams', label: 'Carbs (g)' },
               { key: 'fat_grams', label: 'Fat (g)' },
-            ].map((field) => (
-              <label key={field.key} className="flex flex-col gap-1 text-slate-200">
-                <span className="text-xs text-slate-400">{field.label}</span>
-                <input
-                  type="number"
-                  value={(form as any)[field.key]}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      [field.key]: Number(e.target.value),
-                    }))
-                  }
-                  className="bg-slate-950/70 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                />
-              </label>
-            ))}
+            ].map((field) => {
+              const fieldKey = field.key as keyof NutritionTargets;
+              return (
+                <label key={field.key} className="flex flex-col gap-1 text-slate-200">
+                  <span className="text-xs text-slate-400">{field.label}</span>
+                  <input
+                    type="number"
+                    value={form[fieldKey]}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        [fieldKey]: Number(e.target.value),
+                      }))
+                    }
+                    className="bg-slate-950/70 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  />
+                </label>
+              );
+            })}
           </div>
 
           <button
@@ -129,7 +152,7 @@ export default function NutritionPage() {
             <p className="text-xs text-red-400">Unable to load plans.</p>
           ) : plans && Array.isArray(plans) && plans.length > 0 ? (
             <div className="space-y-2 text-xs">
-              {plans.map((plan: any) => (
+              {plans.map((plan: NutritionPlan) => (
                 <div
                   key={plan.id}
                   className="bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2"

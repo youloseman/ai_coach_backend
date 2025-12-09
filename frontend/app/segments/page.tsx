@@ -23,6 +23,25 @@ type SegmentPR = {
   improvement?: string;
 };
 
+type SearchSegment = {
+  id?: number;
+  strava_segment_id?: string;
+  name: string;
+  activity_type: string;
+  distance_meters: number;
+  city?: string;
+  country?: string;
+};
+
+type TrackSegmentPayload = {
+  strava_segment_id: string;
+  name: string;
+  activity_type: string;
+  distance_meters: number;
+  city?: string;
+  country?: string;
+};
+
 export default function SegmentsPage() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,7 +62,7 @@ export default function SegmentsPage() {
   });
 
   const trackMutation = useMutation({
-    mutationFn: (segment: any) => performanceAPI.trackSegment(segment),
+    mutationFn: (segment: TrackSegmentPayload) => performanceAPI.trackSegment(segment),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['trackedSegments'] });
     },
@@ -166,7 +185,7 @@ export default function SegmentsPage() {
 
           {searchMutation.data && Array.isArray(searchMutation.data) && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {searchMutation.data.map((seg: any) => (
+              {searchMutation.data.map((seg: SearchSegment) => (
                 <div
                   key={seg.id || seg.strava_segment_id}
                   className="bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2 text-xs"

@@ -32,49 +32,7 @@ type PMCDatapoint = {
   tsb: number;
 };
 
-type RunZoneRange = {
-  min_pace?: string;
-  max_pace?: string;
-  description?: string;
-};
-
-type RunZones = {
-  threshold_pace_per_km_formatted?: string;
-  z1?: RunZoneRange;
-  z2?: RunZoneRange;
-  z3?: RunZoneRange;
-  z4?: RunZoneRange;
-  z5?: RunZoneRange;
-};
-
-type BikeZoneRange = {
-  min_hr?: number;
-  max_hr?: number;
-  description?: string;
-};
-
-type BikeZones = {
-  max_hr?: number;
-  z1?: BikeZoneRange;
-  z2?: BikeZoneRange;
-  z3?: BikeZoneRange;
-  z4?: BikeZoneRange;
-  z5?: BikeZoneRange;
-};
-
-type SwimZone = {
-  pace?: string;
-  description?: string;
-};
-
-type SwimZones = {
-  css_pace_formatted?: string;
-  z1?: SwimZone;
-  z2?: SwimZone;
-  z3?: SwimZone;
-  z4?: SwimZone;
-  z5?: SwimZone;
-};
+// Zone types removed - not used in current implementation
 
 const getDaysToRace = (dateStr?: string | null): number | null => {
   if (!dateStr) return null;
@@ -508,40 +466,6 @@ export default function DashboardPage() {
     } catch (err: unknown) {
       console.error('Failed to send weekly report email:', err);
       setPlanError('Failed to send weekly report email.');
-      setPlanStatus('error');
-    } finally {
-      setCurrentAction(null);
-    }
-  };
-
-  const handleRecalculateZonesFromHistory = async () => {
-    try {
-      setPlanStatus('loading');
-      setPlanError(null);
-      setZonesMessage(null);
-      setCurrentAction('zonesAuto');
-
-      const result = await coachAPI.autoCalculateZonesFromActivities();
-
-      setZones({
-        zones_last_updated: result.profile.zones_last_updated,
-        run: result.profile.training_zones_run,
-        bike: result.profile.training_zones_bike,
-        swim: result.profile.training_zones_swim,
-      });
-
-      if (result.status === 'no_race_efforts_found') {
-        setZonesMessage(
-          'No race efforts found in Strava history. Try manual input below.'
-        );
-      } else {
-        setZonesMessage('Zones were set from Strava history.');
-      }
-
-      setPlanStatus('success');
-    } catch (err: unknown) {
-      console.error('Failed to recalculate training zones from history:', err);
-      setPlanError('Failed to recalculate training zones from history.');
       setPlanStatus('error');
     } finally {
       setCurrentAction(null);
