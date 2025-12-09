@@ -18,6 +18,7 @@ import { RacePredictionCard } from '@/components/RacePredictionCard';
 import { FatigueWarningBanner } from '@/components/FatigueWarningBanner';
 import { InjuryRiskCard } from '@/components/InjuryRisk';
 import { WeeklyPlanPreview } from '@/components/WeeklyPlanPreview';
+import { WeeklyPlanCompact } from '@/components/WeeklyPlanCompact';
 import { SegmentsSummary } from '@/components/SegmentsSummary';
 import { NutritionQuickStats } from '@/components/NutritionQuickStats';
 import api from '@/lib/api';
@@ -797,15 +798,18 @@ export default function DashboardPage() {
           />
         </section>
 
-        {/* Form Status, Injury Risk & Race Predictions */}
-        <section className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {/* Form Status, Injury Risk, Race Predictions & Weekly Plan */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
           <FormStatusCard formStatus={formStatus} isLoading={formStatusLoading} />
           <InjuryRiskCard />
           <RacePredictionCard predictions={racePredictions} isLoading={predictionsLoading} />
+          <div className="lg:hidden xl:block">
+            <WeeklyPlanCompact />
+          </div>
         </section>
 
-        {/* Weekly plan preview */}
-        <section className="grid grid-cols-1 gap-4">
+        {/* Weekly plan preview - full width on mobile/tablet */}
+        <section className="grid grid-cols-1 gap-4 lg:hidden xl:hidden">
           <WeeklyPlanPreview />
         </section>
 
