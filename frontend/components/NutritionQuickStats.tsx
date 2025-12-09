@@ -4,10 +4,15 @@ import { useQuery } from '@tanstack/react-query';
 import { nutritionAPI } from '@/lib/api';
 
 interface NutritionTargets {
+  calories?: number;
   calories_kcal?: number;
+  protein_grams?: number;
   protein_g?: number;
+  carbs_grams?: number;
   carbs_g?: number;
+  fat_grams?: number;
   fats_g?: number;
+  water_ml?: number;
   water_l?: number;
   updated_at?: string;
 }
@@ -47,25 +52,35 @@ export function NutritionQuickStats() {
           <div className="flex items-center justify-between">
             <span>Calories</span>
             <span className="text-slate-100">
-              {data.calories_kcal ? `${data.calories_kcal} kcal` : '--'}
+              {data.calories || data.calories_kcal
+                ? `${data.calories || data.calories_kcal} kcal`
+                : '--'}
             </span>
           </div>
           <div className="flex items-center justify-between">
             <span>Protein</span>
             <span className="text-slate-100">
-              {data.protein_g ? `${data.protein_g}g` : '--'}
+              {data.protein_grams || data.protein_g
+                ? `${data.protein_grams || data.protein_g}g`
+                : '--'}
             </span>
           </div>
           <div className="flex items-center justify-between">
             <span>Carbs</span>
             <span className="text-slate-100">
-              {data.carbs_g ? `${data.carbs_g}g` : '--'}
+              {data.carbs_grams || data.carbs_g
+                ? `${data.carbs_grams || data.carbs_g}g`
+                : '--'}
             </span>
           </div>
           <div className="flex items-center justify-between">
             <span>Water</span>
             <span className="text-slate-100">
-              {data.water_l ? `${data.water_l.toFixed(1)} L` : '--'}
+              {data.water_l
+                ? `${data.water_l.toFixed(1)} L`
+                : data.water_ml
+                  ? `${(data.water_ml / 1000).toFixed(1)} L`
+                  : '--'}
             </span>
           </div>
           {data.updated_at && (

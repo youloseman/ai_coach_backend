@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { nutritionAPI } from '@/lib/api';
 
@@ -22,12 +22,6 @@ type NutritionPlan = {
 
 export default function NutritionPage() {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<NutritionTargets>({
-    calories: 0,
-    carbs_grams: 0,
-    protein_grams: 0,
-    fat_grams: 0,
-  });
 
   const { data: targets, isLoading, isError } = useQuery<NutritionTargets>({
     queryKey: ['nutritionTargets'],
@@ -40,28 +34,27 @@ export default function NutritionPage() {
     queryFn: nutritionAPI.getPlans,
   });
 
-  // Update form when targets load, but avoid setState in effect
-  useEffect(() => {
+  // Initialize form from targets using useMemo to avoid setState in effect
+  const initialForm = useMemo<NutritionTargets>(() => {
     if (targets) {
-      // Use functional update to avoid cascading renders
-      setForm((prev) => {
-        if (
-          prev.calories === (targets.calories || 0) &&
-          prev.carbs_grams === (targets.carbs_grams || 0) &&
-          prev.protein_grams === (targets.protein_grams || 0) &&
-          prev.fat_grams === (targets.fat_grams || 0)
-        ) {
-          return prev; // No change needed
-        }
-        return {
-          calories: targets.calories || 0,
-          carbs_grams: targets.carbs_grams || 0,
-          protein_grams: targets.protein_grams || 0,
-          fat_grams: targets.fat_grams || 0,
-        };
-      });
+      return {
+        calories: targets.calories || 0,
+        carbs_grams: targets.carbs_grams || 0,
+        protein_grams: targets.protein_grams || 0,
+        fat_grams: targets.fat_grams || 0,
+      };
     }
+    return {
+      calories: 0,
+      carbs_grams: 0,
+      protein_grams: 0,
+      fat_grams: 0,
+    };
   }, [targets]);
+
+  // Use key to reset form when targets change, avoiding setState in effect
+  const formKey = useMemo(() => (targets ? JSON.stringify(initialForm) : 'empty'), [targets, initialForm]);
+  const [form, setForm] = useState<NutritionTargets>(initialForm);
 
   const updateMutation = useMutation({
     mutationFn: () => nutritionAPI.updateTargets(form),
@@ -107,12 +100,15 @@ export default function NutritionPage() {
               { key: 'fat_grams', label: 'Fat (g)' },
             ].map((field) => {
               const fieldKey = field.key as keyof NutritionTargets;
+              // Use key to reset input when targets change
+              const inputKey = `${field.key}-${formKey}`;
               return (
                 <label key={field.key} className="flex flex-col gap-1 text-slate-200">
                   <span className="text-xs text-slate-400">{field.label}</span>
                   <input
+                    key={inputKey}
                     type="number"
-                    value={form[fieldKey]}
+                    defaultValue={initialForm[fieldKey]}
                     onChange={(e) =>
                       setForm((prev) => ({
                         ...prev,
@@ -124,7 +120,6 @@ export default function NutritionPage() {
                 </label>
               );
             })}
-          </div>
 
           <button
             onClick={() => updateMutation.mutate()}
