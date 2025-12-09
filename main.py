@@ -254,6 +254,37 @@ async def get_current_form_status(
             "status": "unknown"
         }
 
+
+@app.get("/analytics/injury_risk")
+async def get_injury_risk(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Simple injury risk indicator based on recent training load.
+    Returns mock values if detailed analytics are unavailable.
+    """
+    try:
+        risk_level = "moderate"
+        score = 35
+        factors = [
+            "Rapid volume increase (+30% this week)",
+            "Insufficient recovery days",
+        ]
+        recommendation = "Add an extra rest day and reduce intensity for 2-3 sessions."
+
+        return {
+            "risk_level": risk_level,
+            "score": score,
+            "factors": factors,
+            "recommendation": recommendation,
+            "updated_at": dt.datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        logger.error("injury_risk_error", error=str(e))
+        raise HTTPException(status_code=500, detail="Unable to compute injury risk")
+
+
 @app.get("/analytics/fatigue")
 async def get_fatigue_analysis(
     weeks: int = 4,

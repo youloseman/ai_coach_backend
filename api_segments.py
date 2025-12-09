@@ -409,3 +409,47 @@ async def run_injury_risk_analysis(
         "risks": risks
     }
 
+
+@router.get("/segments/recent_prs")
+async def get_recent_prs(
+    limit: int = 3,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns recent personal records for segments.
+    Provides mock data if database records are missing.
+    """
+    try:
+        prs = crud.get_user_prs_on_segments(db, current_user.id, limit=limit)
+
+        if not prs:
+            sample = [
+                {
+                    "name": "Mt. Tam Climb",
+                    "elapsed_time": "15:23",
+                    "improvement": "0:45 faster",
+                    "achieved_date": "2024-12-05",
+                },
+                {
+                    "name": "Hawk Hill",
+                    "elapsed_time": "8:45",
+                    "improvement": "0:12 faster",
+                    "achieved_date": "2024-12-03",
+                },
+            ]
+            return sample[:limit]
+
+        def format_pr(pr):
+            return {
+                "name": pr.segment_name or "Segment",
+                "elapsed_time": pr.elapsed_time or "",
+                "improvement": getattr(pr, "improvement", "PR"),
+                "achieved_date": pr.start_date.isoformat() if pr.start_date else "",
+            }
+
+        return [format_pr(pr) for pr in prs][:limit]
+    except Exception as e:
+        logger.error("segments_recent_prs_error", error=str(e))
+        raise HTTPException(status_code=500, detail="Unable to load recent PRs")
+

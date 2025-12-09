@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { isAuthenticated, logout, getAuthToken } from '@/lib/auth';
-import { profileAPI, goalsAPI, coachAPI, analyticsAPI, stravaAPI } from '@/lib/api';
+import { profileAPI, goalsAPI, coachAPI, analyticsAPI, stravaAPI, zonesAPI } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import type { AthleteProfile, Goal, WeeklyPlan, CoachZonesSummary, StravaActivity } from '@/types';
 import { Activity, Calendar, HeartPulse, Target, ClipboardList, LogOut } from 'lucide-react';
@@ -16,6 +16,10 @@ import { ActivityCard } from '@/components/ActivityCard';
 import { FormStatusCard } from '@/components/FormStatusCard';
 import { RacePredictionCard } from '@/components/RacePredictionCard';
 import { FatigueWarningBanner } from '@/components/FatigueWarningBanner';
+import { InjuryRiskCard } from '@/components/InjuryRisk';
+import { WeeklyPlanPreview } from '@/components/WeeklyPlanPreview';
+import { SegmentsSummary } from '@/components/SegmentsSummary';
+import { NutritionQuickStats } from '@/components/NutritionQuickStats';
 import api from '@/lib/api';
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
@@ -543,6 +547,27 @@ export default function DashboardPage() {
     }
   };
 
+  const handleAutoCalcZone = async (sport: 'run' | 'bike' | 'swim') => {
+    try {
+      setPlanStatus('loading');
+      setCurrentAction('zonesAuto');
+      const result = await zonesAPI.calculate(sport);
+      setZones({
+        zones_last_updated: result.zones_last_updated,
+        run: result.run,
+        bike: result.bike,
+        swim: result.swim,
+      });
+      setZonesMessage(`Updated ${sport} zones automatically.`);
+    } catch (err: unknown) {
+      console.error('Failed to auto-calc zones:', err);
+      setPlanError('Failed to calculate zones. Please try again.');
+      setPlanStatus('error');
+    } finally {
+      setCurrentAction(null);
+    }
+  };
+
   const parseTimeToSeconds = (timeStr: string): number | null => {
     const parts = timeStr.split(':').map((p) => p.trim());
     if (parts.length < 2 || parts.length > 3) {
@@ -772,10 +797,16 @@ export default function DashboardPage() {
           />
         </section>
 
-        {/* Form Status & Race Predictions */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Form Status, Injury Risk & Race Predictions */}
+        <section className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           <FormStatusCard formStatus={formStatus} isLoading={formStatusLoading} />
+          <InjuryRiskCard />
           <RacePredictionCard predictions={racePredictions} isLoading={predictionsLoading} />
+        </section>
+
+        {/* Weekly plan preview */}
+        <section className="grid grid-cols-1 gap-4">
+          <WeeklyPlanPreview />
         </section>
 
         {/* Primary race card */}
@@ -883,6 +914,7 @@ export default function DashboardPage() {
               >
                 Update race goals
               </button>
+              <NutritionQuickStats />
               {planError && (
                 <div className="text-[11px] text-red-400">{planError}</div>
               )}
@@ -937,6 +969,8 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+
+          <SegmentsSummary />
         </section>
 
         {/* All goals overview */}
@@ -1014,15 +1048,20 @@ export default function DashboardPage() {
               <HeartPulse className="w-5 h-5 text-emerald-400" />
               <h2 className="text-sm font-semibold">Training Zones</h2>
             </div>
-            <button
-              className="px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-[11px]"
-              onClick={handleRecalculateZonesFromHistory}
-              disabled={planStatus === 'loading'}
-            >
-              {planStatus === 'loading' && currentAction === 'zonesAuto'
-                ? 'Calculating zones from Strava...'
-                : 'Auto-calc from Strava history'}
-            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+            {(['run', 'bike', 'swim'] as const).map((sport) => (
+              <button
+                key={sport}
+                className="px-3 py-2 rounded-md bg-slate-800 hover:bg-slate-700 text-left text-[11px] border border-slate-700"
+                onClick={() => handleAutoCalcZone(sport)}
+                disabled={planStatus === 'loading'}
+              >
+                {planStatus === 'loading' && currentAction === 'zonesAuto'
+                  ? `Calculating ${sport} zones...`
+                  : `🔄 Auto Calculate (${sport})`}
+              </button>
+            ))}
           </div>
           <div className="text-xs text-slate-400 space-y-2">
             <div>
@@ -1040,187 +1079,79 @@ export default function DashboardPage() {
             {zonesMessage && (
               <div className="text-[11px] text-emerald-300">{zonesMessage}</div>
             )}
-            <div className="flex flex-wrap gap-3">
-              <span
-                className={`px-2 py-0.5 rounded-full border text-[11px] ${
-                  zones?.run
-                    ? 'border-emerald-500 text-emerald-300'
-                    : 'border-slate-700 text-slate-400'
-                }`}
-              >
-                Run zones {zones?.run ? 'ready' : 'not set'}
-              </span>
-              <span
-                className={`px-2 py-0.5 rounded-full border text-[11px] ${
-                  zones?.bike
-                    ? 'border-emerald-500 text-emerald-300'
-                    : 'border-slate-700 text-slate-400'
-                }`}
-              >
-                Bike zones {zones?.bike ? 'ready' : 'not set'}
-              </span>
-              <span
-                className={`px-2 py-0.5 rounded-full border text-[11px] ${
-                  zones?.swim
-                    ? 'border-emerald-500 text-emerald-300'
-                    : 'border-slate-700 text-slate-400'
-                }`}
-              >
-                Swim zones {zones?.swim ? 'ready' : 'not set'}
-              </span>
-            </div>
           </div>
 
-          {(zones?.run || zones?.bike || zones?.swim) && (
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              {/* Run zones details */}
-              {zones?.run && (
-                <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
-                  {(() => {
-                    const runZones = zones.run as RunZones;
-                    return (
-                      <>
-                        <div className="text-[11px] font-semibold text-emerald-300">
-                          Run zones
-                        </div>
-                        {runZones.threshold_pace_per_km_formatted && (
-                          <div className="text-[11px] text-slate-400">
-                            Threshold pace:{' '}
-                            <span className="text-slate-100">
-                              {runZones.threshold_pace_per_km_formatted}
-                            </span>
-                          </div>
-                        )}
-                        <table className="w-full text-[11px] text-slate-300 border-collapse">
-                          <tbody>
-                            {(Object.keys(runZones) as (keyof RunZones)[])
-                              .filter((key) => key.startsWith('z'))
-                              .sort()
-                              .map((key) => {
-                              const zone = runZones[key] as RunZoneRange | undefined;
-                              if (!zone) return null;
-                              return (
-                                <tr key={key}>
-                                  <td className="pr-2 py-1 text-slate-500 uppercase">
-                                    {key.toUpperCase()}
-                                  </td>
-                                  <td className="pr-2 py-1">
-                                    {zone.min_pace && zone.max_pace
-                                      ? `${zone.min_pace} – ${zone.max_pace}`
-                                      : null}
-                                  </td>
-                                  <td className="py-1 text-slate-500">
-                                    {zone.description}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
-
-              {/* Bike zones details */}
-              {zones?.bike && (
-                <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
-                  {(() => {
-                    const bikeZones = zones.bike as BikeZones;
-                    return (
-                      <>
-                        <div className="text-[11px] font-semibold text-emerald-300">
-                          Bike zones (HR)
-                        </div>
-                        {typeof bikeZones.max_hr === 'number' && (
-                          <div className="text-[11px] text-slate-400">
-                            Max HR:{' '}
-                            <span className="text-slate-100">
-                              {bikeZones.max_hr} bpm
-                            </span>
-                          </div>
-                        )}
-                        <table className="w-full text-[11px] text-slate-300 border-collapse">
-                          <tbody>
-                            {(Object.keys(bikeZones) as (keyof BikeZones)[])
-                              .filter((key) => key.startsWith('z'))
-                              .sort()
-                              .map((key) => {
-                              const zone = bikeZones[key] as BikeZoneRange | undefined;
-                              if (!zone) return null;
-                              return (
-                                <tr key={key}>
-                                  <td className="pr-2 py-1 text-slate-500 uppercase">
-                                    {key.toUpperCase()}
-                                  </td>
-                                  <td className="pr-2 py-1">
-                                    {typeof zone.min_hr === 'number' &&
-                                    typeof zone.max_hr === 'number'
-                                      ? `${zone.min_hr}–${zone.max_hr} bpm`
-                                      : null}
-                                  </td>
-                                  <td className="py-1 text-slate-500">
-                                    {zone.description}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
-
-              {/* Swim zones details */}
-              {zones?.swim && (
-                <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
-                  {(() => {
-                    const swimZones = zones.swim as SwimZones;
-                    return (
-                      <>
-                        <div className="text-[11px] font-semibold text-emerald-300">
-                          Swim zones
-                        </div>
-                        {swimZones.css_pace_formatted && (
-                          <div className="text-[11px] text-slate-400">
-                            CSS pace:{' '}
-                            <span className="text-slate-100">
-                              {swimZones.css_pace_formatted}
-                            </span>
-                          </div>
-                        )}
-                        <table className="w-full text-[11px] text-slate-300 border-collapse">
-                          <tbody>
-                            {(Object.keys(swimZones) as (keyof SwimZones)[])
-                              .filter((key) => key.startsWith('z'))
-                              .sort()
-                              .map((key) => {
-                              const zone = swimZones[key] as SwimZone | undefined;
-                              if (!zone) return null;
-                              return (
-                                <tr key={key}>
-                                  <td className="pr-2 py-1 text-slate-500 uppercase">
-                                    {key.toUpperCase()}
-                                  </td>
-                                  <td className="pr-2 py-1">{zone.pace}</td>
-                                  <td className="py-1 text-slate-500">
-                                    {zone.description}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            {/* Run zones */}
+            <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
+              <div className="text-[11px] font-semibold text-emerald-300 flex items-center gap-1">
+                🏃 Run zones
+              </div>
+              <table className="w-full text-[11px] text-slate-300 border-collapse">
+                <tbody>
+                  {[
+                    ['Z1 (Recovery)', '5:30-6:00 min/km', '120-140 bpm'],
+                    ['Z2 (Endurance)', '5:00-5:30 min/km', '140-155 bpm'],
+                    ['Z3 (Tempo)', '4:30-5:00 min/km', '155-165 bpm'],
+                    ['Z4 (Threshold)', '4:00-4:30 min/km', '165-175 bpm'],
+                    ['Z5 (VO2max)', '3:30-4:00 min/km', '175+ bpm'],
+                  ].map(([label, pace, hr]) => (
+                    <tr key={label}>
+                      <td className="pr-2 py-1 text-slate-500 uppercase">{label}</td>
+                      <td className="pr-2 py-1">{pace}</td>
+                      <td className="py-1 text-slate-500">{hr}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
+
+            {/* Bike zones */}
+            <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
+              <div className="text-[11px] font-semibold text-emerald-300 flex items-center gap-1">
+                🚴 Bike zones (HR)
+              </div>
+              <table className="w-full text-[11px] text-slate-300 border-collapse">
+                <tbody>
+                  {[
+                    ['Z1 (Recovery)', '120-140 bpm'],
+                    ['Z2 (Endurance)', '140-155 bpm'],
+                    ['Z3 (Tempo)', '155-165 bpm'],
+                    ['Z4 (Threshold)', '165-175 bpm'],
+                    ['Z5 (VO2max)', '175+ bpm'],
+                  ].map(([label, hr]) => (
+                    <tr key={label}>
+                      <td className="pr-2 py-1 text-slate-500 uppercase">{label}</td>
+                      <td className="py-1 text-slate-500">{hr}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Swim zones */}
+            <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
+              <div className="text-[11px] font-semibold text-emerald-300 flex items-center gap-1">
+                🏊 Swim zones
+              </div>
+              <table className="w-full text-[11px] text-slate-300 border-collapse">
+                <tbody>
+                  {[
+                    ['Z1 (Recovery)', '2:10 /100m'],
+                    ['Z2 (Endurance)', '2:00 /100m'],
+                    ['Z3 (Tempo)', '1:50 /100m'],
+                    ['Z4 (Threshold)', '1:40 /100m'],
+                    ['Z5 (VO2max)', '1:30 /100m'],
+                  ].map(([label, pace]) => (
+                    <tr key={label}>
+                      <td className="pr-2 py-1 text-slate-500 uppercase">{label}</td>
+                      <td className="py-1 text-slate-500">{pace}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           <div className="mt-3 border-t border-slate-800 pt-3 text-xs text-slate-300 space-y-2">
             <div className="flex items-center justify-between">

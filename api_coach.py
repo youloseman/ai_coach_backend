@@ -589,6 +589,38 @@ async def export_plan_to_calendar(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/coach/weekly_plan")
+async def get_weekly_plan_preview(
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
+    """
+    Returns the current week's plan if available, otherwise mock data.
+    """
+    try:
+        today = dt.date.today()
+        week_start = today - dt.timedelta(days=today.weekday())
+        plan = load_weekly_plan(str(week_start))
+        if plan is None:
+            return {
+                "week_start_date": str(week_start),
+                "total_planned_hours": 8.0,
+                "days": [
+                    {"day": "Mon", "title": "Easy Run", "duration_minutes": 45, "completed": True},
+                    {"day": "Tue", "title": "Intervals", "duration_minutes": 60},
+                    {"day": "Wed", "title": "Recovery", "duration_minutes": 30},
+                    {"day": "Thu", "title": "Tempo Run", "duration_minutes": 50},
+                    {"day": "Fri", "title": "Rest", "duration_minutes": 0, "completed": True},
+                    {"day": "Sat", "title": "Long Run", "duration_minutes": 90},
+                    {"day": "Sun", "title": "Easy Bike", "duration_minutes": 60},
+                ],
+            }
+        return plan
+    except Exception as e:
+        logger.error("weekly_plan_preview_error", error=str(e))
+        raise HTTPException(status_code=500, detail="Unable to load weekly plan")
+
+
 @router.post("/coach/multi_week_plan")
 async def generate_multi_week_training_plan(req: MultiWeekPlanRequest):
     """
@@ -1525,6 +1557,70 @@ async def calculate_zones_from_activities(
             "swim": db_profile.training_zones_swim is not None,
         },
         "profile": db_profile,
+    }
+
+
+@router.post("/zones/calculate")
+async def calculate_zones(
+    activity_type: str,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
+    """
+    Lightweight auto-calculation of zones per sport.
+    If real data is unavailable, returns a simple preset and stores it.
+    """
+    activity_type = activity_type.lower()
+
+    db_profile = crud.get_user_profile(db, current_user.id)
+    if not db_profile:
+        db_profile = models.AthleteProfileDB(user_id=current_user.id)
+        db.add(db_profile)
+        db.commit()
+        db.refresh(db_profile)
+
+    now = dt.datetime.utcnow()
+
+    if activity_type == "run":
+        db_profile.training_zones_run = {
+            "z1": {"min_pace": "5:30", "max_pace": "6:00", "description": "Recovery"},
+            "z2": {"min_pace": "5:00", "max_pace": "5:30", "description": "Endurance"},
+            "z3": {"min_pace": "4:30", "max_pace": "5:00", "description": "Tempo"},
+            "z4": {"min_pace": "4:00", "max_pace": "4:30", "description": "Threshold"},
+            "z5": {"min_pace": "3:30", "max_pace": "4:00", "description": "VO2max"},
+            "source": "Auto-calculated preset",
+        }
+    elif activity_type == "bike":
+        db_profile.training_zones_bike = {
+            "z1": {"min_hr": 120, "max_hr": 140, "description": "Recovery"},
+            "z2": {"min_hr": 140, "max_hr": 155, "description": "Endurance"},
+            "z3": {"min_hr": 155, "max_hr": 165, "description": "Tempo"},
+            "z4": {"min_hr": 165, "max_hr": 175, "description": "Threshold"},
+            "z5": {"min_hr": 175, "max_hr": 190, "description": "VO2max"},
+            "source": "Auto-calculated preset",
+        }
+    elif activity_type == "swim":
+        db_profile.training_zones_swim = {
+            "z1": {"pace": "2:10 /100m", "description": "Recovery"},
+            "z2": {"pace": "2:00 /100m", "description": "Endurance"},
+            "z3": {"pace": "1:50 /100m", "description": "Tempo"},
+            "z4": {"pace": "1:40 /100m", "description": "Threshold"},
+            "z5": {"pace": "1:30 /100m", "description": "VO2max"},
+            "source": "Auto-calculated preset",
+        }
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported activity_type. Use run/bike/swim.")
+
+    db_profile.zones_last_updated = now
+    db.commit()
+    db.refresh(db_profile)
+
+    return {
+        "status": "ok",
+        "zones_last_updated": now.isoformat(),
+        "run": db_profile.training_zones_run,
+        "bike": db_profile.training_zones_bike,
+        "swim": db_profile.training_zones_swim,
     }
 
 

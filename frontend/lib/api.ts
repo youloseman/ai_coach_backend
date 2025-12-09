@@ -329,6 +329,11 @@ export const coachAPI = {
     );
     return response.data;
   },
+
+  getWeeklyPlan: async () => {
+    const response = await api.get('/coach/weekly_plan');
+    return response.data;
+  },
 };
 
 // ---------- STRAVA ----------
@@ -364,6 +369,11 @@ export const analyticsAPI = {
     const response = await api.get('/analytics/fatigue', {
       params: { weeks }
     });
+    return response.data;
+  },
+
+  getInjuryRisk: async () => {
+    const response = await api.get('/analytics/injury_risk');
     return response.data;
   },
   
@@ -500,6 +510,27 @@ export const performanceAPI = {
   
   analyzeInjuryRisk: async () => {
     const response = await api.post('/analyze-injury-risk');
+    return response.data;
+  },
+
+  getRecentSegmentPRs: async (limit = 3) => {
+    const response = await api.get('/segments/recent_prs', { params: { limit } });
+    return response.data;
+  },
+};
+
+export const zonesAPI = {
+  calculate: async (activityType: 'run' | 'bike' | 'swim') => {
+    const response = await api.post('/zones/calculate', null, {
+      params: { activity_type: activityType },
+    });
+    return response.data;
+  },
+};
+
+export const weeklyPlanAPI = {
+  getCurrent: async () => {
+    const response = await api.get('/coach/weekly_plan');
     return response.data;
   },
 };
