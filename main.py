@@ -581,6 +581,8 @@ async def strava_callback(
     """
     Обратный вызов от Strava после авторизации.
     Сохраняет токены Strava в БД для текущего пользователя.
+    
+    Uses 'state' parameter to pass JWT token (encoded in base64) for user identification.
     """
     if error:
         raise HTTPException(status_code=400, detail=f"Strava returned error: {error}")
@@ -588,30 +590,35 @@ async def strava_callback(
     if not code:
         raise HTTPException(status_code=400, detail="Missing 'code' parameter from Strava")
     
-    # Extract JWT token from Authorization header manually
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Authorization header required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    # Extract user_id from state parameter (JWT token encoded in base64)
+    # If state is not provided, try to get token from Authorization header
+    user_id = None
     
-    token = auth_header.replace("Bearer ", "")
-    from auth import decode_access_token
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    if state:
+        try:
+            import base64
+            token = base64.b64decode(state).decode('utf-8')
+            from auth import decode_access_token
+            payload = decode_access_token(token)
+            if payload:
+                user_id = payload.get("sub")
+        except Exception as e:
+            logger.warning("failed_to_decode_state", error=str(e))
     
-    user_id = payload.get("sub")
+    # Fallback: try Authorization header
+    if not user_id:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.replace("Bearer ", "")
+            from auth import decode_access_token
+            payload = decode_access_token(token)
+            if payload:
+                user_id = payload.get("sub")
+    
     if not user_id:
         raise HTTPException(
             status_code=401,
-            detail="Invalid token payload",
+            detail="User identification required. Please provide 'state' parameter with JWT token or Authorization header.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -643,13 +650,28 @@ async def strava_callback(
     
     logger.info("strava_connected", user_id=current_user.id, athlete_id=athlete_id)
     
-    return JSONResponse(
-        content={
-            "status": "ok",
-            "message": "Strava authorization successful",
-            "token_saved": True,
-        }
-    )
+    # Return HTML that redirects to frontend
+    frontend_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+    return HTMLResponse(content=f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Strava Connected</title>
+            <script>
+                window.opener.postMessage({{ type: 'strava_connected', success: true }}, '*');
+                window.close();
+            </script>
+        </head>
+        <body>
+            <p>Strava authorization successful! You can close this window.</p>
+            <script>
+                setTimeout(() => {{
+                    window.location.href = '{frontend_url}/coach';
+                }}, 2000);
+            </script>
+        </body>
+        </html>
+    """)
 
 
 @app.get("/strava/activities")
