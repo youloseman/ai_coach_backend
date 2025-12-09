@@ -125,37 +125,73 @@ async def get_targets(
 ):
     """
     Get saved nutrition targets for current user.
+    Returns default values if not set.
     """
-    targets = db.query(models.NutritionTargetDB).filter(
-        models.NutritionTargetDB.user_id == current_user.id
-    ).first()
-    
-    if not targets:
-        raise HTTPException(
-            status_code=404,
-            detail="No nutrition targets found. Calculate targets first."
+    try:
+        targets = db.query(models.NutritionTargetDB).filter(
+            models.NutritionTargetDB.user_id == current_user.id
+        ).first()
+        
+        if not targets:
+            # Return default values if not set
+            default_calories = 2500
+            return NutritionTargetsResponse(
+                calories=default_calories,
+                carbs_grams=300,
+                protein_grams=150,
+                fat_grams=70,
+                breakdown={
+                    "carbs_percent": 48.0,
+                    "protein_percent": 24.0,
+                    "fat_percent": 25.2,
+                },
+            )
+        
+        total_calories = targets.daily_calories or 0
+        if total_calories == 0:
+            # Return default values if calories not set
+            default_calories = 2500
+            return NutritionTargetsResponse(
+                calories=default_calories,
+                carbs_grams=300,
+                protein_grams=150,
+                fat_grams=70,
+                breakdown={
+                    "carbs_percent": 48.0,
+                    "protein_percent": 24.0,
+                    "fat_percent": 25.2,
+                },
+            )
+        
+        breakdown = {
+            "carbs_percent": round((targets.daily_carbs_grams * 4 / total_calories) * 100, 1) if total_calories > 0 else 0,
+            "protein_percent": round((targets.daily_protein_grams * 4 / total_calories) * 100, 1) if total_calories > 0 else 0,
+            "fat_percent": round((targets.daily_fat_grams * 9 / total_calories) * 100, 1) if total_calories > 0 else 0,
+        }
+        
+        return NutritionTargetsResponse(
+            calories=targets.daily_calories,
+            carbs_grams=targets.daily_carbs_grams,
+            protein_grams=targets.daily_protein_grams,
+            fat_grams=targets.daily_fat_grams,
+            breakdown=breakdown,
         )
-    
-    total_calories = targets.daily_calories or 0
-    if total_calories == 0:
-        raise HTTPException(
-            status_code=404,
-            detail="Nutrition targets not calculated yet."
+    except Exception as e:
+        from config import logger
+        logger.error("nutrition_targets_error", error=str(e), user_id=current_user.id)
+        # Return defaults even on error
+        default_calories = 2500
+        return NutritionTargetsResponse(
+            calories=default_calories,
+            carbs_grams=300,
+            protein_grams=150,
+            fat_grams=70,
+            breakdown={
+                "carbs_percent": 48.0,
+                "protein_percent": 24.0,
+                "fat_percent": 25.2,
+            },
         )
-    
-    breakdown = {
-        "carbs_percent": round((targets.daily_carbs_grams * 4 / total_calories) * 100, 1) if total_calories > 0 else 0,
-        "protein_percent": round((targets.daily_protein_grams * 4 / total_calories) * 100, 1) if total_calories > 0 else 0,
-        "fat_percent": round((targets.daily_fat_grams * 9 / total_calories) * 100, 1) if total_calories > 0 else 0,
-    }
-    
-    return NutritionTargetsResponse(
-        calories=targets.daily_calories,
-        carbs_grams=targets.daily_carbs_grams,
-        protein_grams=targets.daily_protein_grams,
-        fat_grams=targets.daily_fat_grams,
-        breakdown=breakdown,
-    )
 
 
 @router.put("/targets", response_model=NutritionTargetsResponse)

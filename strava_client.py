@@ -23,20 +23,33 @@ async def fetch_activities_for_user(
 ) -> list[dict]:
     """
     Загрузить активности конкретного пользователя из Strava.
+    Returns empty list if user not connected to Strava.
     """
-    tokens = await get_user_tokens(user_id, db)
+    try:
+        tokens = await get_user_tokens(user_id, db)
+    except ValueError as e:
+        # User not connected to Strava
+        logger.warning("strava_not_connected", user_id=user_id, error=str(e))
+        return []  # Return empty list instead of raising error
+    except Exception as e:
+        logger.error("strava_fetch_error", user_id=user_id, error=str(e))
+        return []
     
     url = "https://www.strava.com/api/v3/athlete/activities"
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
     
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            url,
-            headers=headers,
-            params={"page": page, "per_page": per_page}
-        )
-        response.raise_for_status()
-        return response.json()
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url,
+                headers=headers,
+                params={"page": page, "per_page": per_page}
+            )
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        logger.error("strava_api_error", user_id=user_id, error=str(e))
+        return []
 
 
 async def fetch_activities_last_n_weeks_for_user(
@@ -48,6 +61,7 @@ async def fetch_activities_last_n_weeks_for_user(
     """
     Загрузить активности за последние N недель для пользователя.
     Поддерживает кеширование для оптимизации производительности.
+    Returns empty list if user not connected to Strava.
     """
     import datetime as dt
     
@@ -59,10 +73,18 @@ async def fetch_activities_last_n_weeks_for_user(
             return cached
     
     # Cache miss - fetch from Strava
+    try:
+        tokens = await get_user_tokens(user_id, db)
+    except ValueError as e:
+        # User not connected to Strava
+        logger.warning("strava_not_connected", user_id=user_id, weeks=weeks, error=str(e))
+        return []  # Return empty list instead of raising error
+    except Exception as e:
+        logger.error("strava_fetch_error", user_id=user_id, weeks=weeks, error=str(e))
+        return []
+    
     logger.info("strava_activities_fetch", user_id=user_id, weeks=weeks)
     after_timestamp = int((dt.datetime.now() - dt.timedelta(weeks=weeks)).timestamp())
-    
-    tokens = await get_user_tokens(user_id, db)
     
     url = "https://www.strava.com/api/v3/athlete/activities"
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
@@ -70,25 +92,29 @@ async def fetch_activities_last_n_weeks_for_user(
     all_activities = []
     page = 1
     
-    async with httpx.AsyncClient() as client:
-        while True:
-            response = await client.get(
-                url,
-                headers=headers,
-                params={"after": after_timestamp, "page": page, "per_page": 100}
-            )
-            response.raise_for_status()
-            activities = response.json()
-            
-            if not activities:
-                break
-            
-            all_activities.extend(activities)
-            page += 1
-            
-            # Safety limit
-            if page > 10:
-                break
+    try:
+        async with httpx.AsyncClient() as client:
+            while True:
+                response = await client.get(
+                    url,
+                    headers=headers,
+                    params={"after": after_timestamp, "page": page, "per_page": 100}
+                )
+                response.raise_for_status()
+                activities = response.json()
+                
+                if not activities:
+                    break
+                
+                all_activities.extend(activities)
+                page += 1
+                
+                # Safety limit
+                if page > 10:
+                    break
+    except Exception as e:
+        logger.error("strava_api_error", user_id=user_id, weeks=weeks, error=str(e))
+        return []
     
     # Cache the results
     if use_cache and all_activities:
@@ -105,18 +131,30 @@ async def fetch_activity_by_id(
 ) -> dict:
     """
     Fetch a single Strava activity for a specific user.
+    Returns None if user not connected to Strava.
     """
-    tokens = await get_user_tokens(user_id, db)
+    try:
+        tokens = await get_user_tokens(user_id, db)
+    except ValueError as e:
+        # User not connected to Strava
+        logger.warning("strava_not_connected", user_id=user_id, activity_id=activity_id, error=str(e))
+        return None
+    except Exception as e:
+        logger.error("strava_fetch_error", user_id=user_id, activity_id=activity_id, error=str(e))
+        return None
+    
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-
     url = f"https://www.strava.com/api/v3/activities/{activity_id}"
     params = {"include_all_efforts": str(include_all_efforts).lower()}
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers=headers, params=params)
-
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers, params=params)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        logger.error("strava_api_error", user_id=user_id, activity_id=activity_id, error=str(e))
+        return None
 
 async def refresh_access_token_if_needed(user_id: int, db: Session, tokens: dict) -> dict:
     """
@@ -232,8 +270,18 @@ async def fetch_activities(
 ) -> list[dict]:
     """
     Тянем список активностей для конкретного пользователя (как /strava/activities).
+    Returns empty list if user not connected to Strava.
     """
-    tokens = await get_user_tokens(user_id, db)
+    try:
+        tokens = await get_user_tokens(user_id, db)
+    except ValueError as e:
+        # User not connected to Strava
+        logger.warning("strava_not_connected", user_id=user_id, error=str(e))
+        return []  # Return empty list instead of raising error
+    except Exception as e:
+        logger.error("strava_fetch_error", user_id=user_id, error=str(e))
+        return []
+    
     url = "https://www.strava.com/api/v3/athlete/activities"
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
     params = {
@@ -241,15 +289,19 @@ async def fetch_activities(
         "per_page": per_page,
     }
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers=headers, params=params)
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers, params=params)
 
-    if resp.status_code != 200:
-        raise HTTPException(status_code=resp.status_code, detail=resp.text)
-
-    activities_raw = resp.json()
-
-    return [_normalize_activity(a) for a in activities_raw]
+        if resp.status_code != 200:
+            logger.error("strava_api_error", user_id=user_id, status_code=resp.status_code)
+            return []
+        
+        activities_raw = resp.json()
+        return [_normalize_activity(a) for a in activities_raw]
+    except Exception as e:
+        logger.error("strava_api_error", user_id=user_id, error=str(e))
+        return []
 
 
 async def fetch_recent_activities_for_coach(
@@ -259,22 +311,33 @@ async def fetch_recent_activities_for_coach(
 ) -> list[dict]:
     """
     Тянем последние limit тренировок для конкретного пользователя, чтобы отправить их в GPT-коучу.
+    Returns empty list if user not connected to Strava.
     """
     try:
         tokens = await get_user_tokens(user_id, db)
-        url = "https://www.strava.com/api/v3/athlete/activities"
-        headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    except ValueError as e:
+        # User not connected to Strava
+        logger.warning("strava_not_connected", user_id=user_id, error=str(e))
+        return []  # Return empty list instead of raising error
+    except Exception as e:
+        logger.error("strava_fetch_error", user_id=user_id, error=str(e))
+        return []
+    
+    url = "https://www.strava.com/api/v3/athlete/activities"
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
-        activities: list[dict] = []
-        page = 1
-        per_page = 50
+    activities: list[dict] = []
+    page = 1
+    per_page = 50
 
+    try:
         async with httpx.AsyncClient() as client:
             while len(activities) < limit:
                 params = {"page": page, "per_page": per_page}
                 resp = await client.get(url, headers=headers, params=params)
                 if resp.status_code != 200:
-                    raise HTTPException(status_code=resp.status_code, detail=resp.text)
+                    logger.error("strava_api_error", user_id=user_id, status_code=resp.status_code)
+                    break
 
                 chunk = resp.json()
                 if not chunk:
@@ -291,14 +354,9 @@ async def fetch_recent_activities_for_coach(
 
         logger.info("fetch_recent_activities_for_coach", user_id=user_id, count=len(activities))
         return activities
-    except httpx.HTTPError as e:
-        logger.error("strava_network_error", user_id=user_id, error=str(e))
-        raise HTTPException(
-            status_code=503,
-            detail="Unable to connect to Strava. Please try again later."
-        )
     except Exception as e:
-        logger.error("unexpected_error_fetching_activities", user_id=user_id, error=str(e))
+        logger.error("strava_api_error", user_id=user_id, error=str(e))
+        return []  # Return empty list instead of raising error
         raise HTTPException(
             status_code=500,
             detail="An unexpected error occurred while fetching activities."

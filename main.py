@@ -201,7 +201,9 @@ async def get_fitness_timeline(
         
         if not activities:
             return {
-                "error": "No activities found",
+                "status": "no_data",
+                "message": "No activities found. Connect to Strava to see your fitness timeline.",
+                "days": days,
                 "timeline": []
             }
         
@@ -237,8 +239,17 @@ async def get_current_form_status(
         
         if not activities:
             return {
-                "error": "No activities found",
-                "status": "unknown"
+                "status": "no_data",
+                "message": "No activities found. Connect to Strava to track your training.",
+                "date": str(dt.date.today()),
+                "ctl": 0,
+                "atl": 0,
+                "tsb": 0,
+                "form": {
+                    "label": "Unknown",
+                    "description": "Connect to Strava to see your training form",
+                    "recommendation": "Connect your Strava account to start tracking"
+                }
             }
         
         # Рассчитываем метрики
@@ -325,10 +336,20 @@ async def get_fatigue_analysis(
         activities = await fetch_activities_last_n_weeks(current_user.id, db, weeks=weeks)
         
         if not activities:
+            # Return safe defaults when no activities
             return {
-                "error": "No activities found",
-                "overall_fatigue_level": "unknown",
-                "fatigue_score": 0
+                "status": "no_data",
+                "message": "No activity data available. Connect to Strava to track fatigue.",
+                "risk_level": "unknown",
+                "risk_score": 0,
+                "factors": [],
+                "recommendations": ["Connect to Strava to track fatigue"],
+                "fatigue_analysis": {
+                    "overall_fatigue_level": "unknown",
+                    "fatigue_score": 0,
+                    "factors": [],
+                    "recommendations": ["Connect to Strava to track fatigue"]
+                }
             }
         
         # Анализируем усталость
@@ -424,7 +445,11 @@ async def get_all_race_predictions(
         
         if not activities:
             return {
-                "error": "No activities found",
+                "status": "no_data",
+                "message": "No activities found. Connect to Strava and complete some workouts to see predictions.",
+                "sport": sport,
+                "current_form": None,
+                "best_efforts": {},
                 "predictions": []
             }
         
@@ -775,15 +800,36 @@ async def get_strava_activities(
 ):
     """
     Получить активности из Strava для текущего пользователя (с пагинацией).
+    Returns empty list if user not connected to Strava.
     """
-    from strava_client import fetch_activities
-    activities = await fetch_activities(current_user.id, db, page=page, per_page=per_page)
-    return {
-        "count": len(activities),
-        "page": page,
-        "per_page": per_page,
-        "activities": activities
-    }
+    try:
+        from strava_client import fetch_activities
+        activities = await fetch_activities(current_user.id, db, page=page, per_page=per_page)
+        
+        if not activities:
+            return {
+                "count": 0,
+                "page": page,
+                "per_page": per_page,
+                "activities": [],
+                "message": "No activities found. Connect to Strava to sync your data."
+            }
+        
+        return {
+            "count": len(activities),
+            "page": page,
+            "per_page": per_page,
+            "activities": activities
+        }
+    except Exception as e:
+        logger.error("strava_activities_endpoint_error", error=str(e), user_id=current_user.id)
+        return {
+            "count": 0,
+            "page": page,
+            "per_page": per_page,
+            "activities": [],
+            "error": "Unable to fetch activities"
+        }
 
 
 @app.get("/strava/status")
