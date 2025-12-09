@@ -45,9 +45,10 @@ export const PerformanceChart = ({ data }: PerformanceChartProps) => {
               month: 'long',
               day: 'numeric'
             })}
-            formatter={(value: any) => {
-              if (typeof value === 'number' && !isNaN(value)) {
-                return value.toFixed(1);
+            formatter={(value: number | string) => {
+              const numValue = typeof value === 'string' ? parseFloat(value) : value;
+              if (typeof numValue === 'number' && !isNaN(numValue)) {
+                return numValue.toFixed(1);
               }
               return 'N/A';
             }}
