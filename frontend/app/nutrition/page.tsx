@@ -120,6 +120,7 @@ export default function NutritionPage() {
                 </label>
               );
             })}
+          </div>
 
           <button
             onClick={() => updateMutation.mutate()}
