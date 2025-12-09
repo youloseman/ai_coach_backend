@@ -1,4 +1,5 @@
 from typing import Optional
+import base64
 
 from fastapi import FastAPI, HTTPException, Depends, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -619,14 +620,15 @@ async def strava_callback(
     
     if state:
         try:
-            import base64
+            # Decode base64 state parameter
             token = base64.b64decode(state).decode('utf-8')
             from auth import decode_access_token
             payload = decode_access_token(token)
             if payload:
                 user_id = payload.get("sub")
+                logger.info("strava_callback_state_decoded", user_id=user_id)
         except Exception as e:
-            logger.warning("failed_to_decode_state", error=str(e))
+            logger.error("failed_to_decode_state", error=str(e), state_preview=state[:20] if state else None)
     
     # Fallback: try Authorization header
     if not user_id:
@@ -650,51 +652,64 @@ async def strava_callback(
     if not current_user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    from strava_client import exchange_code_for_token
-    token_data = await exchange_code_for_token(code)
-    
-    # Save tokens to DB for current user
-    athlete_id = str(token_data.get("athlete", {}).get("id", ""))
-    access_token = token_data.get("access_token")
-    refresh_token = token_data.get("refresh_token")
-    expires_at = token_data.get("expires_at")
-    
-    if not all([athlete_id, access_token, refresh_token, expires_at]):
-        raise HTTPException(status_code=400, detail="Invalid token data from Strava")
-    
-    await save_strava_tokens(
-        user_id=current_user.id,
-        athlete_id=athlete_id,
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_at=expires_at,
-        db=db
-    )
-    
-    logger.info("strava_connected", user_id=current_user.id, athlete_id=athlete_id)
-    
-    # Return HTML that redirects to frontend
-    frontend_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
-    return HTMLResponse(content=f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Strava Connected</title>
-            <script>
-                window.opener.postMessage({{ type: 'strava_connected', success: true }}, '*');
-                window.close();
-            </script>
-        </head>
-        <body>
-            <p>Strava authorization successful! You can close this window.</p>
-            <script>
-                setTimeout(() => {{
-                    window.location.href = '{frontend_url}/coach';
-                }}, 2000);
-            </script>
-        </body>
-        </html>
-    """)
+    try:
+        from strava_client import exchange_code_for_token
+        token_data = await exchange_code_for_token(code)
+        
+        # Save tokens to DB for current user
+        athlete_id = str(token_data.get("athlete", {}).get("id", ""))
+        access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
+        expires_at = token_data.get("expires_at")
+        
+        if not all([athlete_id, access_token, refresh_token, expires_at]):
+            logger.error("strava_callback_invalid_token_data", 
+                        has_athlete_id=bool(athlete_id),
+                        has_access_token=bool(access_token),
+                        has_refresh_token=bool(refresh_token),
+                        has_expires_at=bool(expires_at))
+            raise HTTPException(status_code=400, detail="Invalid token data from Strava")
+        
+        await save_strava_tokens(
+            user_id=current_user.id,
+            athlete_id=athlete_id,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_at=expires_at,
+            db=db
+        )
+        
+        logger.info("strava_connected", user_id=current_user.id, athlete_id=athlete_id)
+        
+        # Return HTML that redirects to frontend
+        frontend_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+        return HTMLResponse(content=f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Strava Connected</title>
+                <script>
+                    if (window.opener) {{
+                        window.opener.postMessage({{ type: 'strava_connected', success: true }}, '*');
+                        window.close();
+                    }}
+                </script>
+            </head>
+            <body>
+                <p>Strava authorization successful! You can close this window.</p>
+                <script>
+                    setTimeout(() => {{
+                        window.location.href = '{frontend_url}/coach';
+                    }}, 2000);
+                </script>
+            </body>
+            </html>
+        """)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("strava_callback_error", error=str(e), user_id=current_user.id if 'current_user' in locals() else None)
+        raise HTTPException(status_code=500, detail=f"Error processing Strava callback: {str(e)}")
 
 
 @app.get("/strava/activities")
