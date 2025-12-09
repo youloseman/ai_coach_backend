@@ -102,13 +102,17 @@ export default function NutritionPage() {
               const fieldKey = field.key as keyof NutritionTargets;
               // Use key to reset input when targets change
               const inputKey = `${field.key}-${formKey}`;
+              // Ensure we only use numeric fields, not breakdown
+              const fieldValue = typeof initialForm[fieldKey] === 'number' 
+                ? initialForm[fieldKey] 
+                : 0;
               return (
                 <label key={field.key} className="flex flex-col gap-1 text-slate-200">
                   <span className="text-xs text-slate-400">{field.label}</span>
                   <input
                     key={inputKey}
                     type="number"
-                    defaultValue={initialForm[fieldKey]}
+                    defaultValue={fieldValue}
                     onChange={(e) =>
                       setForm((prev) => ({
                         ...prev,
