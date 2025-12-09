@@ -69,6 +69,17 @@ except Exception as e:
 
 app = FastAPI(title="AI Triathlon Coach API")
 
+# CORS middleware MUST be added BEFORE rate limiting
+# CORS configuration - allow all origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
+
 # Rate limiting setup
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
@@ -97,40 +108,7 @@ try:
 except Exception as e:
     logger.warning("cache_initialization_failed", error=str(e))
 
-# CORS middleware
-# Разрешаем запросы с локального фронта и прод-фронта (Railway).
-import os
-import re
-
-FRONTEND_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
-FRONTEND_RAILWAY_URL = os.getenv("FRONTEND_RAILWAY_URL", "")
-
-# Allow all Railway frontend URLs (they can change)
-allowed_origins = [
-    "http://localhost:3000",
-    "http://localhost:8080",  # Railway local
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:8080",
-]
-
-if FRONTEND_URL:
-    allowed_origins.append(FRONTEND_URL)
-if FRONTEND_RAILWAY_URL:
-    allowed_origins.append(FRONTEND_RAILWAY_URL)
-
-# Allow any Railway app URL (wildcard pattern)
-# Railway URLs follow pattern: https://<service-name>-<hash>.up.railway.app
-allowed_origins.append("https://*.up.railway.app")
-
-# CORS configuration - allow all origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
+# CORS middleware moved to top (after app creation, before rate limiting)
 
 app.include_router(auth_router)
 app.include_router(user_router)
@@ -594,14 +572,54 @@ async def root():
 
 @app.get("/auth/strava/callback")
 async def strava_callback(
-    code: str,
-    current_user: models.User = Depends(get_current_user),
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """
     Обратный вызов от Strava после авторизации.
     Сохраняет токены Strava в БД для текущего пользователя.
     """
+    if error:
+        raise HTTPException(status_code=400, detail=f"Strava returned error: {error}")
+    
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing 'code' parameter from Strava")
+    
+    # Extract JWT token from Authorization header manually
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    token = auth_header.replace("Bearer ", "")
+    from auth import decode_access_token
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Get user from database
+    current_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
     from strava_client import exchange_code_for_token
     token_data = await exchange_code_for_token(code)
     
