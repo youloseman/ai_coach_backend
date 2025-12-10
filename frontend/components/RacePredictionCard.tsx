@@ -103,7 +103,9 @@ export function RacePredictionCard() {
     return 'bg-red-500';
   };
 
-  const probability = prediction.prediction.probability_of_success;
+  const probability = typeof prediction.prediction.probability_of_success === 'number' 
+    ? prediction.prediction.probability_of_success 
+    : 0;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -151,13 +153,13 @@ export function RacePredictionCard() {
               Success Probability
             </span>
             <span className={`text-2xl font-bold ${getProbabilityColor(probability)}`}>
-              {probability.toFixed(0)}%
+              {typeof probability === 'number' ? `${probability.toFixed(0)}%` : 'N/A'}
             </span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
             <div
               className={`h-3 rounded-full transition-all duration-500 ${getProbabilityBarColor(probability)}`}
-              style={{ width: `${Math.min(probability, 100)}%` }}
+              style={{ width: `${Math.min(typeof probability === 'number' ? probability : 0, 100)}%` }}
             ></div>
           </div>
         </div>

@@ -41,6 +41,11 @@ export function FatigueWarningBanner() {
     return null;
   }
 
+  // Check if overall_fatigue_level exists and is a string
+  if (!fatigueData.overall_fatigue_level || typeof fatigueData.overall_fatigue_level !== 'string') {
+    return null;
+  }
+
   const level = fatigueData.overall_fatigue_level.toUpperCase();
   if (level !== 'HIGH' && level !== 'CRITICAL') {
     return null;
@@ -86,7 +91,11 @@ export function FatigueWarningBanner() {
           </div>
 
           <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
-            Fatigue Score: <span className="font-bold">{fatigueData.fatigue_score.toFixed(1)}/100</span>
+            Fatigue Score: <span className="font-bold">
+              {typeof fatigueData.fatigue_score === 'number' 
+                ? `${fatigueData.fatigue_score.toFixed(1)}/100`
+                : 'N/A'}
+            </span>
           </p>
 
           {/* Detected Issues */}

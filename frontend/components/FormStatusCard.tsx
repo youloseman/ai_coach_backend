@@ -147,7 +147,7 @@ export function FormStatusCard() {
               Fitness (CTL)
             </div>
             <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              {formStatus.current_ctl.toFixed(1)}
+              {typeof formStatus.current_ctl === 'number' ? formStatus.current_ctl.toFixed(1) : 'N/A'}
             </div>
           </div>
           <div className="text-center">
@@ -155,7 +155,7 @@ export function FormStatusCard() {
               Fatigue (ATL)
             </div>
             <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              {formStatus.current_atl.toFixed(1)}
+              {typeof formStatus.current_atl === 'number' ? formStatus.current_atl.toFixed(1) : 'N/A'}
             </div>
           </div>
           <div className="text-center">
@@ -163,8 +163,9 @@ export function FormStatusCard() {
               Form (TSB)
             </div>
             <div className={`text-2xl font-bold ${getTSBColor(formStatus.current_tsb)}`}>
-              {formStatus.current_tsb > 0 ? '+' : ''}
-              {formStatus.current_tsb.toFixed(1)}
+              {typeof formStatus.current_tsb === 'number' 
+                ? `${formStatus.current_tsb > 0 ? '+' : ''}${formStatus.current_tsb.toFixed(1)}`
+                : 'N/A'}
             </div>
           </div>
         </div>
