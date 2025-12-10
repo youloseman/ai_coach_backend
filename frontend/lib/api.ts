@@ -434,7 +434,7 @@ export const nutritionAPI = {
   },
 
   generateDailyPlan: async (goal = 'performance') => {
-    const response = await api.post('/nutrition/generate', null, { params: { goal } });
+    const response = await api.get('/nutrition/generate', { params: { goal } });
     return response.data;
   },
   

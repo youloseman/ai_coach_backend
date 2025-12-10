@@ -364,7 +364,7 @@ async def list_nutrition_plans(
     ]
 
 
-@router.post("/generate", response_model=dict)
+@router.get("/generate", response_model=dict)
 async def generate_daily_plan(
     goal: str = Query(default="performance", description="Nutrition goal type"),
     current_user: models.User = Depends(get_current_user),
