@@ -222,6 +222,12 @@ def upsert_activity(db: Session, user_id: int, strava_activity: dict) -> Activit
         _apply_activity_fields(existing, user_id, strava_activity)
         db.commit()
         db.refresh(existing)
+        # Calculate TSS if not already set
+        if existing.tss is None:
+            from services.activity_service import calculate_and_save_tss
+            user = db.query(User).filter(User.id == user_id).first()
+            if user:
+                calculate_and_save_tss(existing, user, db)
         return existing
 
     activity = ActivityDB()
@@ -229,6 +235,18 @@ def upsert_activity(db: Session, user_id: int, strava_activity: dict) -> Activit
     db.add(activity)
     db.commit()
     db.refresh(activity)
+    
+    # Calculate TSS automatically
+    try:
+        from services.activity_service import calculate_and_save_tss
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            calculate_and_save_tss(activity, user, db)
+    except Exception as e:
+        # Don't fail if TSS calculation fails
+        from config import logger
+        logger.warning("tss_calculation_failed_on_import", activity_id=activity.id, error=str(e))
+    
     return activity
 
 
