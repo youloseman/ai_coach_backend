@@ -222,6 +222,17 @@ export const profileAPI = {
     const response = await api.patch<AthleteProfile>('/profile', data);
     return response.data;
   },
+
+  updateTrainingZones: async (zones: {
+    ftp?: number;
+    threshold_pace_min_per_km?: number;
+    css_pace_100m_seconds?: number;
+    max_hr?: number;
+    rest_hr?: number;
+  }): Promise<AthleteProfile> => {
+    const response = await api.patch<AthleteProfile>('/profile/training-zones', zones);
+    return response.data;
+  },
 };
 
 // ---------- GOALS ----------

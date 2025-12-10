@@ -50,6 +50,15 @@ class ProfileUpdate(BaseModel):
     preferred_training_days: Optional[List[str]] = None
 
 
+class TrainingZonesUpdate(BaseModel):
+    """Update training zones for TSS calculation"""
+    ftp: Optional[int] = Field(None, description="Functional Threshold Power (watts) for cycling")
+    threshold_pace_min_per_km: Optional[float] = Field(None, description="Threshold pace (min/km) for running")
+    css_pace_100m_seconds: Optional[float] = Field(None, description="Critical Swim Speed (seconds/100m) for swimming")
+    max_hr: Optional[int] = Field(None, description="Maximum heart rate (bpm)")
+    rest_hr: Optional[int] = Field(None, description="Resting heart rate (bpm)")
+
+
 class ProfileResponse(BaseModel):
     id: int
     user_id: int
