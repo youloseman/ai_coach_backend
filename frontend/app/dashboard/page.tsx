@@ -21,6 +21,8 @@ import { WeeklyPlanPreview } from '@/components/WeeklyPlanPreview';
 import { WeeklyPlanCompact } from '@/components/WeeklyPlanCompact';
 import { SegmentsSummary } from '@/components/SegmentsSummary';
 import { NutritionQuickStats } from '@/components/NutritionQuickStats';
+import { FitnessSummary } from '@/components/analytics/FitnessSummary';
+import { PMCChart } from '@/components/charts/PMCChart';
 import api from '@/lib/api';
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
@@ -699,6 +701,11 @@ export default function DashboardPage() {
           />
         </section>
 
+        {/* Fitness Summary (PMC Metrics) */}
+        <section className="grid grid-cols-1 gap-4">
+          <FitnessSummary />
+        </section>
+
         {/* Form Status, Injury Risk, Race Predictions & Weekly Plan */}
         <section className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
           <FormStatusCard />
@@ -707,6 +714,11 @@ export default function DashboardPage() {
           <div className="lg:hidden xl:block">
             <WeeklyPlanCompact />
           </div>
+        </section>
+
+        {/* PMC Chart */}
+        <section className="grid grid-cols-1 gap-4">
+          <PMCChart />
         </section>
 
         {/* Weekly plan preview - full width on mobile/tablet */}
