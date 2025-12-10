@@ -35,20 +35,37 @@ export function TrainingZones() {
 
   useEffect(() => {
     if (profile) {
-      // Extract zones from profile
+      // Extract zones from profile with proper type handling
+      const getNumber = (value: unknown): number => {
+        if (typeof value === 'number') return value;
+        if (typeof value === 'string') {
+          const parsed = parseFloat(value);
+          return isNaN(parsed) ? 0 : parsed;
+        }
+        return 0;
+      };
+
       setZones({
-        ftp: profile.training_zones_bike?.ftp || 0,
-        threshold_pace_min_per_km: profile.training_zones_run?.threshold_pace_min_per_km || 
-                                   profile.training_zones_run?.threshold_pace || 0,
-        css_pace_100m_seconds: profile.training_zones_swim?.css_pace_100m_seconds ||
-                               profile.training_zones_swim?.css_pace_100m ||
-                               profile.training_zones_swim?.css || 0,
-        max_hr: profile.training_zones_bike?.max_hr || 
-                profile.training_zones_run?.max_hr || 
-                profile.training_zones_swim?.max_hr || 0,
-        rest_hr: profile.training_zones_bike?.rest_hr || 
-                 profile.training_zones_run?.rest_hr || 
-                 profile.training_zones_swim?.rest_hr || 0,
+        ftp: getNumber(profile.training_zones_bike?.ftp),
+        threshold_pace_min_per_km: getNumber(
+          profile.training_zones_run?.threshold_pace_min_per_km || 
+          profile.training_zones_run?.threshold_pace
+        ),
+        css_pace_100m_seconds: getNumber(
+          profile.training_zones_swim?.css_pace_100m_seconds ||
+          profile.training_zones_swim?.css_pace_100m ||
+          profile.training_zones_swim?.css
+        ),
+        max_hr: getNumber(
+          profile.training_zones_bike?.max_hr || 
+          profile.training_zones_run?.max_hr || 
+          profile.training_zones_swim?.max_hr
+        ),
+        rest_hr: getNumber(
+          profile.training_zones_bike?.rest_hr || 
+          profile.training_zones_run?.rest_hr || 
+          profile.training_zones_swim?.rest_hr
+        ),
       });
     }
   }, [profile]);
