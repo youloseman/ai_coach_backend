@@ -4,7 +4,7 @@ Provides daily nutrition targets, race day fueling plans, and recovery nutrition
 """
 from typing import Optional
 import datetime as dt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -34,6 +34,14 @@ class NutritionTargetsRequest(BaseModel):
     activity_level: str = "active"  # "sedentary", "light", "moderate", "active", "very_active"
     training_hours_per_week: float = 8.0
     goal_type: str = "performance"  # "maintain", "lose_weight", "gain_muscle", "performance"
+
+
+class NutritionTargetsUpdateRequest(BaseModel):
+    """Request to update nutrition targets (without breakdown)"""
+    calories: float
+    carbs_grams: float
+    protein_grams: float
+    fat_grams: float
 
 
 class NutritionTargetsResponse(BaseModel):
@@ -196,7 +204,7 @@ async def get_targets(
 
 @router.put("/targets", response_model=NutritionTargetsResponse)
 async def update_targets(
-    request: NutritionTargetsResponse,
+    request: NutritionTargetsUpdateRequest,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -358,7 +366,7 @@ async def list_nutrition_plans(
 
 @router.post("/generate", response_model=dict)
 async def generate_daily_plan(
-    goal: str = "performance",
+    goal: str = Query(default="performance", description="Nutrition goal type"),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
