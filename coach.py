@@ -10,7 +10,21 @@ from config import (
     GPT_TEMPERATURE_ASSESSMENT,
     logger
 )
-from prompts.trainer_prompt import TRAINER_SYSTEM_PROMPT
+from prompts.builder import build_coach_prompt
+
+
+def _determine_sport_type(goal_type: str) -> str:
+    """Determine sport type from goal type."""
+    goal_upper = goal_type.upper()
+    if 'IRONMAN' in goal_upper or 'TRIATHLON' in goal_upper or 'OLYMPIC' in goal_upper or 'SPRINT' in goal_upper:
+        return 'triathlon'
+    elif 'SWIM' in goal_upper:
+        return 'swim'
+    elif 'BIKE' in goal_upper or 'CYCLING' in goal_upper:
+        return 'cycling'
+    else:
+        # Default to running for MARATHON, HALF_MARATHON, 10K, 5K, etc.
+        return 'run'
 
 
 class GoalInput(BaseModel):
@@ -33,6 +47,37 @@ async def run_initial_assessment(goal: GoalInput, activities: list[dict]) -> dic
     """
     logger.info("initial_assessment_started", goal_type=goal.main_goal_type, activities_count=len(activities))
     athlete_profile = load_athlete_profile()
+    
+    # Determine sport type and build prompt
+    sport_type = _determine_sport_type(goal.main_goal_type)
+    profile_dict = athlete_profile.model_dump()
+    
+    system_prompt = build_coach_prompt(
+        sport_type=sport_type,
+        athlete_profile={
+            'age': profile_dict.get('age'),
+            'gender': profile_dict.get('gender'),
+            'years_of_experience': profile_dict.get('years_of_experience', 0),
+            'avg_hours_per_week': profile_dict.get('auto_avg_hours_last_12_weeks'),
+            'current_streak': profile_dict.get('auto_current_weekly_streak_weeks'),
+            'longest_streak': profile_dict.get('auto_longest_weekly_streak_weeks'),
+            'available_hours_per_week': profile_dict.get('available_hours_per_week', 8),
+            'preferred_training_days': profile_dict.get('preferred_training_days', []),
+            'training_zones': {
+                'run': profile_dict.get('training_zones_run'),
+                'bike': profile_dict.get('training_zones_bike'),
+                'swim': profile_dict.get('training_zones_swim'),
+            },
+            'notes': goal.comments or '',
+        },
+        goal={
+            'goal_type': goal.main_goal_type,
+            'race_date': goal.main_goal_race_date,
+            'target_time': goal.main_goal_target_time,
+            'is_primary': True,
+        },
+        recent_activities=activities
+    )
 
     user_payload = {
         "goals": {
@@ -51,7 +96,7 @@ async def run_initial_assessment(goal: GoalInput, activities: list[dict]) -> dic
             model=GPT_MODEL,
             temperature=GPT_TEMPERATURE_ASSESSMENT,
             messages=[
-                {"role": "system", "content": TRAINER_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
                     "content": (
@@ -94,6 +139,37 @@ async def run_weekly_plan(req: WeeklyPlanRequest, activities: list[dict]) -> dic
                 available_hours=req.available_hours_per_week,
                 activities_count=len(activities))
     athlete_profile = load_athlete_profile()
+    
+    # Determine sport type and build prompt
+    sport_type = _determine_sport_type(req.goal.main_goal_type)
+    profile_dict = athlete_profile.model_dump()
+    
+    system_prompt = build_coach_prompt(
+        sport_type=sport_type,
+        athlete_profile={
+            'age': profile_dict.get('age'),
+            'gender': profile_dict.get('gender'),
+            'years_of_experience': profile_dict.get('years_of_experience', 0),
+            'avg_hours_per_week': profile_dict.get('auto_avg_hours_last_12_weeks'),
+            'current_streak': profile_dict.get('auto_current_weekly_streak_weeks'),
+            'longest_streak': profile_dict.get('auto_longest_weekly_streak_weeks'),
+            'available_hours_per_week': req.available_hours_per_week,
+            'preferred_training_days': profile_dict.get('preferred_training_days', []),
+            'training_zones': {
+                'run': profile_dict.get('training_zones_run'),
+                'bike': profile_dict.get('training_zones_bike'),
+                'swim': profile_dict.get('training_zones_swim'),
+            },
+            'notes': req.goal.comments or req.notes or '',
+        },
+        goal={
+            'goal_type': req.goal.main_goal_type,
+            'race_date': req.goal.main_goal_race_date,
+            'target_time': req.goal.main_goal_target_time,
+            'is_primary': True,
+        },
+        recent_activities=activities
+    )
 
     user_payload = {
         "goals": {
@@ -117,7 +193,7 @@ async def run_weekly_plan(req: WeeklyPlanRequest, activities: list[dict]) -> dic
             temperature=GPT_TEMPERATURE_PLANNING,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": TRAINER_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
                     "content": (

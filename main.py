@@ -133,7 +133,7 @@ app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(coach_router)
 app.include_router(segments_router)
-app.include_router(nutrition_router, prefix="/nutrition", tags=["nutrition"])
+app.include_router(nutrition_router)
 
 
 # ===== ANALYTICS =====
