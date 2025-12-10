@@ -46,14 +46,14 @@ export function RacePredictionCard() {
     return (
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h3 className="text-sm font-semibold text-slate-100">
             Race Prediction
           </h3>
         </div>
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
-          <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          <div className="h-8 bg-slate-800 rounded w-32"></div>
+          <div className="h-4 bg-slate-800 rounded w-full"></div>
+          <div className="h-12 bg-slate-800 rounded"></div>
         </div>
       </div>
     );
@@ -63,19 +63,57 @@ export function RacePredictionCard() {
     return (
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
-          <Trophy className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <Trophy className="w-5 h-5 text-amber-400" />
+          <h3 className="text-sm font-semibold text-slate-100">
             Race Prediction
           </h3>
         </div>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
+        <p className="text-sm text-slate-300">
           Set a primary goal to see your race prediction and success probability.
         </p>
       </div>
     );
   }
 
-  if (!prediction || prediction.status !== 'success') {
+  if (!prediction) {
+    return (
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Trophy className="w-5 h-5 text-amber-400" />
+          <h3 className="text-sm font-semibold text-slate-100">
+            Race Prediction
+          </h3>
+        </div>
+        <p className="text-sm text-slate-300">
+          Complete more workouts to get race predictions.
+        </p>
+      </div>
+    );
+  }
+
+  if (prediction.status !== 'success' || !prediction.prediction || !prediction.goal) {
+    return (
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Trophy className="w-5 h-5 text-amber-400" />
+          <h3 className="text-sm font-semibold text-slate-100">
+            Race Prediction
+          </h3>
+        </div>
+        <p className="text-sm text-slate-300 mb-2">
+          {prediction.error ||
+            (prediction.status === 'no_data'
+              ? 'No race efforts found in your training history.'
+              : prediction.status === 'invalid_target_time'
+              ? 'Target time format is invalid. Use formats like 1:30:00 or 45:30.'
+              : 'Unable to generate race prediction right now.')}
+        </p>
+        {prediction.recommendation && (
+          <p className="text-xs text-slate-400">{prediction.recommendation}</p>
+        )}
+      </div>
+    );
+  }
     return (
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
@@ -105,7 +143,7 @@ export function RacePredictionCard() {
     return 'bg-red-500';
   };
 
-  const probability = prediction.prediction.probability_of_success;
+  const probability = prediction.prediction?.probability_of_success;
 
   return (
     <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">

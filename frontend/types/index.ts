@@ -341,11 +341,11 @@ export interface FatigueAnalysis {
 
 export interface RacePrediction {
   status: string;
-  goal: {
+  goal?: {
     race_type: string;
     target_time: string;
   };
-  prediction: {
+  prediction?: {
     race_type: string;
     distance_km: number;
     predicted_time: string;
@@ -356,7 +356,9 @@ export interface RacePrediction {
     time_gap?: string;
     faster_or_slower?: string;
   };
-  recommendations: string[];
+  recommendations?: string[];
+  error?: string;
+  recommendation?: string;
 }
 
 export interface AllRacePredictions {
