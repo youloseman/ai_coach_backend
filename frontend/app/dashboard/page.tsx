@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAuthenticated, logout, getAuthToken } from '@/lib/auth';
 import { profileAPI, goalsAPI, coachAPI, stravaAPI, zonesAPI } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
@@ -96,6 +96,8 @@ export default function DashboardPage() {
     bikeFtp: '',
     swimCss: '',
   });
+
+  const queryClient = useQueryClient();
 
   const {
     data: timelineData = [],
@@ -267,6 +269,8 @@ export default function DashboardPage() {
         week_start_date: plan.week_start_date,
         total_planned_hours: plan.total_planned_hours,
       });
+      // Refresh weekly plan previews on dashboard
+      await queryClient.invalidateQueries({ queryKey: ['weeklyPlanPreview'] });
       setPlanStatus('success');
     } catch (err: unknown) {
       console.error('Failed to generate weekly plan:', err);
@@ -319,6 +323,9 @@ export default function DashboardPage() {
       if (exportResult.download_url && typeof window !== 'undefined') {
         window.open(exportResult.download_url, '_blank');
       }
+
+      // Weekly plan might be updated as part of export; refresh preview as well
+      await queryClient.invalidateQueries({ queryKey: ['weeklyPlanPreview'] });
 
       setPlanStatus('success');
     } catch (err: unknown) {
@@ -424,6 +431,18 @@ export default function DashboardPage() {
         readiness_score: result.readiness_score,
         readiness_label: result.readiness_label,
       });
+
+      // If email failed, surface backend message to the user
+      if (result.email_sent === false && result.email_error) {
+        setPlanError(
+          `Weekly report generated, but email sending failed: ${result.email_error}`,
+        );
+      } else {
+        setPlanError(null);
+      }
+
+      // Weekly report also generates and saves a plan; refresh preview
+      await queryClient.invalidateQueries({ queryKey: ['weeklyPlanPreview'] });
 
       setPlanStatus('success');
     } catch (err: unknown) {

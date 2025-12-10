@@ -1481,17 +1481,26 @@ async def coach_weekly_report_email(
 
     subject = req.subject or f"AI Coach – Weekly report (week starting {week_start_str})"
 
-    # Try to send email, but don't fail the whole request if email provider
-    # is not configured or returns an error. This is critical in hosted
-    # environments (Railway/Vercel) where SMTP/Resend may be missing.
+    # Determine recipient: prefer current user's email, fallback to configured EMAIL_TO
+    recipient_email = getattr(current_user, "email", None) or EMAIL_TO
+
     email_sent = False
     email_error: Optional[str] = None
-    try:
-        send_html_email(EMAIL_TO, subject, html_body)
-        email_sent = True
-    except Exception as e:  # noqa: BLE001
-        logger.error("weekly_report_email_send_error", error=str(e))
-        email_error = str(e)
+
+    if not recipient_email:
+        # No recipient configured at all - log and continue without raising
+        email_error = "No recipient email configured. Set user.email or EMAIL_TO env var."
+        logger.error("weekly_report_email_no_recipient", error=email_error)
+    else:
+        # Try to send email, but don't fail the whole request if email provider
+        # is not configured or returns an error. This is critical in hosted
+        # environments (Railway/Vercel) where SMTP/Resend may be missing.
+        try:
+            send_html_email(recipient_email, subject, html_body)
+            email_sent = True
+        except Exception as e:  # noqa: BLE001
+            logger.error("weekly_report_email_send_error", error=str(e))
+            email_error = str(e)
 
     save_weekly_report(
         week_start_str,
@@ -1507,14 +1516,15 @@ async def coach_weekly_report_email(
             "performance_prediction": prediction_result,
             "email_sent": email_sent,
             "email_error": email_error,
+            "recipient_email": recipient_email,
         },
     )
 
     return {
         "status": "ok",
         "message": (
-            f"Weekly report sent to {EMAIL_TO}"
-            if email_sent
+            f"Weekly report sent to {recipient_email}"
+            if email_sent and recipient_email
             else "Weekly report generated, but email sending failed"
         ),
         "week_start_date": week_start_str,
@@ -1529,6 +1539,7 @@ async def coach_weekly_report_email(
         "performance_prediction": prediction_result,
         "email_sent": email_sent,
         "email_error": email_error,
+        "recipient_email": recipient_email,
     }
 
 

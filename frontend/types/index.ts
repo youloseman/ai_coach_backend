@@ -175,6 +175,9 @@ export interface WeeklyReportEmailResponse {
   progress_weeks: number;
   readiness_score: number;
   readiness_label: string;
+  email_sent?: boolean;
+  email_error?: string | null;
+  recipient_email?: string | null;
 }
 
 // ===== COACH PROFILE & ZONES (JSON-backed) =====
