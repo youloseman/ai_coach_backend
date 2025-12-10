@@ -24,8 +24,16 @@ interface PMCData {
   rr?: number[];
 }
 
+interface ChartDataPoint {
+  date: string;
+  fullDate: string;
+  CTL: number;
+  ATL: number;
+  TSB: number;
+}
+
 export function PMCChart() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<ChartDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +54,7 @@ export function PMCChart() {
       
       // Transform for Recharts - show last 90 days
       const last90Days = pmc.dates.slice(-90);
-      const chartData = last90Days.map((date, i) => {
+      const chartData: ChartDataPoint[] = last90Days.map((date) => {
         const idx = pmc.dates.indexOf(date);
         return {
           date: new Date(date).toLocaleDateString('en-US', {
