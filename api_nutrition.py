@@ -377,27 +377,34 @@ async def generate_daily_plan(
         models.NutritionTargetDB.user_id == current_user.id
     ).first()
 
+    # If no targets are set yet, fall back to sensible defaults instead of 400
     if not targets or not targets.daily_calories:
-        raise HTTPException(status_code=400, detail="Set nutrition targets first.")
+        default_calories = 2500
+        daily_calories = default_calories
+        used_defaults = True
+    else:
+        daily_calories = targets.daily_calories
+        used_defaults = False
 
     plan = {
         "plan_type": "daily",
         "goal": goal,
-        "daily_calories": targets.daily_calories,
+        "daily_calories": daily_calories,
         "meals": [
-            {"name": "Breakfast", "calories": round(targets.daily_calories * 0.25, 1)},
-            {"name": "Lunch", "calories": round(targets.daily_calories * 0.35, 1)},
-            {"name": "Dinner", "calories": round(targets.daily_calories * 0.3, 1)},
-            {"name": "Snacks", "calories": round(targets.daily_calories * 0.1, 1)},
+            {"name": "Breakfast", "calories": round(daily_calories * 0.25, 1)},
+            {"name": "Lunch", "calories": round(daily_calories * 0.35, 1)},
+            {"name": "Dinner", "calories": round(daily_calories * 0.3, 1)},
+            {"name": "Snacks", "calories": round(daily_calories * 0.1, 1)},
         ],
         "created_at": dt.datetime.utcnow().isoformat(),
+        "used_defaults": used_defaults,
     }
 
     db_plan = models.NutritionPlanDB(
         user_id=current_user.id,
         plan_type="daily",
         daily_meals=plan["meals"],
-        notes=f"Goal: {goal}",
+        notes=f"Goal: {goal}" + (" (used default calories)" if used_defaults else ""),
     )
     db.add(db_plan)
     db.commit()
