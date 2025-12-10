@@ -173,12 +173,13 @@ def find_best_efforts(activities: List[dict], sport: str = "run") -> Dict[str, R
     """
     best_efforts = {}
     
-    # Целевые дистанции (в метрах)
+    # Целевые дистанции (в метрах) с более широкими диапазонами,
+    # чтобы учитывать длинные тренировки, близкие к целевой дистанции.
     target_distances = {
-        "5K": (4500, 5500),      # 4.5-5.5 km
-        "10K": (9500, 10500),    # 9.5-10.5 km
-        "HM": (20000, 22000),    # 20-22 km (half marathon)
-        "Marathon": (41000, 43000)  # 41-43 km
+        "5K": (4000, 6000),         # 4-6 km
+        "10K": (8000, 12000),       # 8-12 km
+        "HM": (18000, 25000),       # ~18-25 km (half marathon)
+        "Marathon": (35000, 45000)  # ~35-45 km
     }
     
     for activity in activities:
@@ -220,7 +221,7 @@ def predict_race_times(
     best_efforts: Dict[str, RaceEffort],
     race_types: List[str] = None,
     tsb: Optional[float] = None
-) -> List[RacePrediction]:
+):
     """
     Прогнозирует времена на разные дистанции на основе лучших результатов.
     
@@ -345,6 +346,40 @@ def calculate_success_probability(
     return min(adjusted_probability, 95.0)  # Cap at 95%
 
 
+def normalize_goal_race_type(goal_race_type: str) -> str:
+    """
+    Нормализует тип цели гонки к одной из базовых дистанций для расчёта:
+    5K, 10K, HM, Marathon.
+
+    Это позволяет использовать одни и те же алгоритмы для беговых
+    и триатлонных целей (SPRINT/OLYMPIC/HALF_IRONMAN/IRONMAN).
+    """
+    t = goal_race_type.upper()
+
+    # Прямые соответствия
+    if t in {"5K", "10K", "HM", "HALF_MARATHON", "MARATHON"}:
+        if t == "HALF_MARATHON":
+            return "HM"
+        if t == "MARATHON":
+            return "Marathon"
+        return t
+
+    # Триатлон-специфика: маппим по беговой части
+    if t in {"SPRINT"}:
+        return "5K"       # спринт → ~5K бег
+    if t in {"OLYMPIC"}:
+        return "10K"      # олимпийка → ~10K бег
+    if t in {"HALF_IRONMAN", "HALF-IRONMAN", "70.3"}:
+        return "HM"       # половинка → полу-марафон
+    if t in {"IRONMAN", "FULL_IRONMAN", "140.6"}:
+        return "Marathon" # полный → марафон
+
+    # Fallback: если ничего не узнали, пусть будет набор базовых
+    # (выше по коду будет обработано как prediction_failed,
+    #  но хотя бы не рухнёт).
+    return "10K"
+
+
 def predict_for_goal(
     activities: List[dict],
     goal_race_type: str,
@@ -384,8 +419,11 @@ def predict_for_goal(
             "recommendation": "Complete some benchmark workouts (5K, 10K) to get predictions"
         }
     
+    # Нормализуем тип гонки к одной из базовых дистанций
+    normalized_race_type = normalize_goal_race_type(goal_race_type)
+
     # Прогнозируем времена
-    predictions = predict_race_times(best_efforts, race_types=[goal_race_type], tsb=tsb)
+    predictions = predict_race_times(best_efforts, race_types=[normalized_race_type], tsb=tsb)
     
     if not predictions:
         return {
