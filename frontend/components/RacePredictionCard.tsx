@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Trophy, Target, RefreshCw } from 'lucide-react';
+import { Trophy, RefreshCw } from 'lucide-react';
 import { goalsAPI, analyticsAPI } from '@/lib/api';
 import type { Goal, RacePrediction } from '@/types';
 
@@ -44,7 +44,7 @@ export function RacePredictionCard() {
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Race Prediction
@@ -61,7 +61,7 @@ export function RacePredictionCard() {
 
   if (error || !primaryGoal) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Trophy className="w-5 h-5 text-gray-400 dark:text-gray-500" />
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -77,7 +77,7 @@ export function RacePredictionCard() {
 
   if (!prediction || prediction.status !== 'success') {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Trophy className="w-5 h-5 text-amber-400" />
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -91,34 +91,34 @@ export function RacePredictionCard() {
     );
   }
 
-  const getProbabilityColor = (probability: number) => {
-    if (probability >= 70) return 'text-green-600 dark:text-green-400';
-    if (probability >= 40) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
+  const getProbabilityColor = (probability?: number) => {
+    if (probability === undefined || probability === null) return 'text-slate-400';
+    if (probability >= 70) return 'text-emerald-400';
+    if (probability >= 40) return 'text-amber-400';
+    return 'text-red-400';
   };
 
-  const getProbabilityBarColor = (probability: number) => {
+  const getProbabilityBarColor = (probability?: number) => {
+    if (probability === undefined || probability === null) return 'bg-slate-700';
     if (probability >= 70) return 'bg-green-500';
     if (probability >= 40) return 'bg-yellow-500';
     return 'bg-red-500';
   };
 
-  const probability = typeof prediction.prediction.probability_of_success === 'number' 
-    ? prediction.prediction.probability_of_success 
-    : 0;
+  const probability = prediction.prediction.probability_of_success;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Trophy className="w-5 h-5 text-amber-400" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Race Prediction: {prediction.prediction.goal_race_type}
+          <h3 className="text-sm font-semibold text-slate-100">
+            Race Prediction: {prediction.goal.race_type}
           </h3>
         </div>
         <button
           onClick={loadPrediction}
-          className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          className="p-2 text-slate-500 hover:text-slate-300 transition-colors"
           aria-label="Refresh prediction"
         >
           <RefreshCw className="w-4 h-4" />
@@ -128,90 +128,60 @@ export function RacePredictionCard() {
       <div className="space-y-4">
         {/* Goal vs Predicted Times */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="text-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
-              Your Goal
-            </div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              {prediction.prediction.goal_time}
+          <div className="text-center p-3 bg-slate-900 rounded-lg border border-slate-700">
+            <div className="text-xs text-slate-400 uppercase mb-1">Your Goal</div>
+            <div className="text-2xl font-bold text-slate-100">
+              {prediction.goal.target_time}
             </div>
           </div>
-          <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
-              Predicted
-            </div>
-            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+          <div className="text-center p-3 bg-sky-500/10 rounded-lg border border-sky-500/40">
+            <div className="text-xs text-slate-400 uppercase mb-1">Predicted</div>
+            <div className="text-2xl font-bold text-sky-400">
               {prediction.prediction.predicted_time}
             </div>
           </div>
         </div>
 
         {/* Success Probability */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Success Probability
-            </span>
-            <span className={`text-2xl font-bold ${getProbabilityColor(probability)}`}>
-              {typeof probability === 'number' ? `${probability.toFixed(0)}%` : 'N/A'}
-            </span>
+        {probability !== undefined && probability !== null && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-slate-200">
+                Success Probability
+              </span>
+              <span className={`text-2xl font-bold ${getProbabilityColor(probability)}`}>
+                {probability.toFixed(0)}%
+              </span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-3">
+              <div
+                className={`h-3 rounded-full transition-all duration-500 ${getProbabilityBarColor(
+                  probability,
+                )}`}
+                style={{ width: `${Math.min(probability, 100)}%` }}
+              ></div>
+            </div>
           </div>
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-            <div
-              className={`h-3 rounded-full transition-all duration-500 ${getProbabilityBarColor(probability)}`}
-              style={{ width: `${Math.min(typeof probability === 'number' ? probability : 0, 100)}%` }}
-            ></div>
-          </div>
-        </div>
+        )}
 
-        {/* Current Fitness Level */}
-        <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-          <div className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
-            Current Fitness
-          </div>
-          <div className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            {prediction.prediction.current_fitness_level}
-          </div>
+        {/* Based on and confidence */}
+        <div className="text-xs text-slate-400 space-y-1">
+          <div>Based on: {prediction.prediction.based_on}</div>
+          <div>Model confidence: {prediction.prediction.confidence.toFixed(1)}%</div>
         </div>
 
         {/* Recommendations */}
-        {prediction.prediction.recommendations && prediction.prediction.recommendations.length > 0 && (
+        {prediction.recommendations && prediction.recommendations.length > 0 && (
           <div>
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
-              Recommendations:
-            </p>
+            <p className="text-sm font-semibold text-slate-100 mb-2">Recommendations:</p>
             <ul className="space-y-1">
-              {prediction.prediction.recommendations.map((rec, idx) => (
-                <li key={idx} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
-                  <span className="text-blue-600 dark:text-blue-400">→</span>
+              {prediction.recommendations.map((rec, idx) => (
+                <li key={idx} className="text-sm text-slate-300 flex items-start gap-2">
+                  <span className="text-sky-400">→</span>
                   <span>{rec}</span>
                 </li>
               ))}
             </ul>
-          </div>
-        )}
-
-        {/* Pacing Strategy (if available) */}
-        {prediction.prediction.pacing_strategy && (
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
-              <Target className="w-4 h-4" />
-              Pacing Strategy ({prediction.prediction.pacing_strategy.split_type})
-            </p>
-            <div className="space-y-1">
-              {prediction.prediction.pacing_strategy.splits.map((split, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400"
-                >
-                  <span>{split.segment}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-blue-600 dark:text-blue-400">{split.target_pace}</span>
-                    <span className="text-gray-500">({split.target_time})</span>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </div>

@@ -305,13 +305,13 @@ export interface TrainingLoadAnalysis {
 
 export interface FormStatus {
   status: string;
-  current_date: string;
-  current_ctl: number;
-  current_atl: number;
-  current_tsb: number;
+  date: string;
+  ctl: number;
+  atl: number;
+  tsb: number;
   form: {
     label: string;
-    color: string;
+    color?: string;
     description: string;
     recommendation: string;
   };
@@ -341,24 +341,22 @@ export interface FatigueAnalysis {
 
 export interface RacePrediction {
   status: string;
-  prediction: {
-    goal_race_type: string;
-    goal_time: string;
-    predicted_time: string;
-    predicted_seconds: number;
-    goal_seconds: number;
-    probability_of_success: number;
-    current_fitness_level: string;
-    recommendations: string[];
-    pacing_strategy?: {
-      split_type: string;
-      splits: Array<{
-        segment: string;
-        target_pace: string;
-        target_time: string;
-      }>;
-    };
+  goal: {
+    race_type: string;
+    target_time: string;
   };
+  prediction: {
+    race_type: string;
+    distance_km: number;
+    predicted_time: string;
+    confidence: number;
+    based_on: string;
+    target_time?: string;
+    probability_of_success?: number;
+    time_gap?: string;
+    faster_or_slower?: string;
+  };
+  recommendations: string[];
 }
 
 export interface AllRacePredictions {

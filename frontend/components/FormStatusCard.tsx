@@ -30,7 +30,7 @@ export function FormStatusCard() {
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Current Form
@@ -49,9 +49,9 @@ export function FormStatusCard() {
     );
   }
 
-  if (error || !formStatus) {
+  if (error || !formStatus || formStatus.status !== 'success' || !formStatus.form) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Activity className="w-5 h-5 text-gray-400 dark:text-gray-500" />
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -65,64 +65,66 @@ export function FormStatusCard() {
     );
   }
 
-  const getFormColor = (color: string) => {
-    switch (color.toLowerCase()) {
+  const getFormColor = (color: string | undefined) => {
+    const normalized = (color || 'gray').toLowerCase();
+    switch (normalized) {
       case 'green':
         return {
-          bg: 'bg-green-100 dark:bg-green-900/20',
-          text: 'text-green-800 dark:text-green-400',
-          border: 'border-green-300 dark:border-green-700',
+          bg: 'bg-emerald-500/10',
+          text: 'text-emerald-400',
+          border: 'border-emerald-500/30',
           icon: TrendingUp,
         };
       case 'yellow':
+      case 'lightgreen':
         return {
-          bg: 'bg-yellow-100 dark:bg-yellow-900/20',
-          text: 'text-yellow-800 dark:text-yellow-400',
-          border: 'border-yellow-300 dark:border-yellow-700',
+          bg: 'bg-emerald-500/10',
+          text: 'text-emerald-400',
+          border: 'border-emerald-500/30',
           icon: Minus,
         };
       case 'orange':
         return {
-          bg: 'bg-orange-100 dark:bg-orange-900/20',
-          text: 'text-orange-800 dark:text-orange-400',
-          border: 'border-orange-300 dark:border-orange-700',
+          bg: 'bg-amber-500/10',
+          text: 'text-amber-400',
+          border: 'border-amber-500/30',
           icon: TrendingDown,
         };
       case 'red':
         return {
-          bg: 'bg-red-100 dark:bg-red-900/20',
-          text: 'text-red-800 dark:text-red-400',
-          border: 'border-red-300 dark:border-red-700',
+          bg: 'bg-red-500/10',
+          text: 'text-red-400',
+          border: 'border-red-500/30',
           icon: TrendingDown,
         };
       default:
         return {
-          bg: 'bg-gray-100 dark:bg-gray-700',
-          text: 'text-gray-800 dark:text-gray-300',
-          border: 'border-gray-300 dark:border-gray-600',
+          bg: 'bg-slate-800',
+          text: 'text-slate-200',
+          border: 'border-slate-700',
           icon: Minus,
         };
     }
   };
 
   const getTSBColor = (tsb: number) => {
-    if (tsb > 5) return 'text-green-600 dark:text-green-400';
-    if (tsb < -10) return 'text-red-600 dark:text-red-400';
-    return 'text-yellow-600 dark:text-yellow-400';
+    if (tsb > 5) return 'text-emerald-400';
+    if (tsb < -10) return 'text-red-400';
+    return 'text-amber-400';
   };
 
   const formColor = getFormColor(formStatus.form.color);
   const FormIcon = formColor.icon;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <h3 className="text-sm font-semibold text-slate-100">
           Current Form
         </h3>
         <button
           onClick={loadFormStatus}
-          className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          className="p-2 text-slate-500 hover:text-slate-300 transition-colors"
           aria-label="Refresh form status"
         >
           <RefreshCw className="w-4 h-4" />
@@ -143,47 +145,47 @@ export function FormStatusCard() {
         {/* Metrics Grid */}
         <div className="grid grid-cols-3 gap-4">
           <div className="text-center">
-            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
+            <div className="text-xs text-slate-400 uppercase mb-1">
               Fitness (CTL)
             </div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              {typeof formStatus.current_ctl === 'number' ? formStatus.current_ctl.toFixed(1) : 'N/A'}
+            <div className="text-2xl font-bold text-slate-100">
+              {typeof formStatus.ctl === 'number' ? formStatus.ctl.toFixed(1) : 'N/A'}
             </div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
+            <div className="text-xs text-slate-400 uppercase mb-1">
               Fatigue (ATL)
             </div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              {typeof formStatus.current_atl === 'number' ? formStatus.current_atl.toFixed(1) : 'N/A'}
+            <div className="text-2xl font-bold text-slate-100">
+              {typeof formStatus.atl === 'number' ? formStatus.atl.toFixed(1) : 'N/A'}
             </div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
+            <div className="text-xs text-slate-400 uppercase mb-1">
               Form (TSB)
             </div>
-            <div className={`text-2xl font-bold ${getTSBColor(formStatus.current_tsb)}`}>
-              {typeof formStatus.current_tsb === 'number' 
-                ? `${formStatus.current_tsb > 0 ? '+' : ''}${formStatus.current_tsb.toFixed(1)}`
+            <div className={`text-2xl font-bold ${getTSBColor(formStatus.tsb)}`}>
+              {typeof formStatus.tsb === 'number' 
+                ? `${formStatus.tsb > 0 ? '+' : ''}${formStatus.tsb.toFixed(1)}`
                 : 'N/A'}
             </div>
           </div>
         </div>
 
         {/* Description */}
-        <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+        <p className="text-sm text-slate-300 leading-relaxed">
           {formStatus.form.description}
         </p>
 
         {/* Recommendation */}
-        <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-400 p-3 rounded">
+        <div className="bg-sky-500/10 border-l-4 border-sky-500/60 p-3 rounded">
           <div className="flex items-start gap-2">
             <span className="text-blue-600 dark:text-blue-400 text-lg">💡</span>
             <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+              <p className="text-sm font-medium text-slate-100 mb-1">
                 Recommendation:
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-slate-300">
                 {formStatus.form.recommendation}
               </p>
             </div>
