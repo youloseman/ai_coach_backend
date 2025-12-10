@@ -590,6 +590,56 @@ async def export_plan_to_calendar(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _format_weekly_plan_for_preview(plan: dict, week_start: dt.date) -> dict:
+    """
+    Приводит полный weekly plan из GPT к упрощённому виду для дашборда:
+    - day: короткое имя дня недели ("Mon", "Tue", ...)
+    - title: короткое описание (sport + session_type)
+    - duration_minutes: длительность в минутах
+    - completed: флаг выполнения (по умолчанию False)
+    """
+    week_start_str = plan.get("week_start_date") or str(week_start)
+    total_hours = plan.get("total_planned_hours", 0)
+    raw_days = plan.get("days") or []
+
+    preview_days = []
+    for d in raw_days:
+        date_str = d.get("date")
+        day_label = d.get("day") or ""
+
+        if date_str and not day_label:
+            try:
+                date_obj = dt.date.fromisoformat(date_str)
+                # Mon, Tue, Wed...
+                day_label = date_obj.strftime("%a")
+            except Exception:
+                day_label = ""
+
+        # Строим короткий заголовок
+        sport = d.get("sport") or ""
+        session_type = d.get("session_type") or ""
+        title = d.get("title") or " ".join([sport, session_type]).strip() or "Workout"
+
+        duration = d.get("duration_minutes")
+        if duration is None:
+            duration = d.get("duration_min")
+
+        preview_days.append(
+            {
+                "day": day_label,
+                "title": title,
+                "duration_minutes": duration,
+                "completed": d.get("completed", False),
+            }
+        )
+
+    return {
+        "week_start_date": week_start_str,
+        "total_planned_hours": float(total_hours) if isinstance(total_hours, (int, float)) else 0.0,
+        "days": preview_days,
+    }
+
+
 @router.get("/coach/weekly_plan")
 async def get_weekly_plan_preview(
     current_user: models.User = Depends(get_current_user),
@@ -603,6 +653,7 @@ async def get_weekly_plan_preview(
         week_start = today - dt.timedelta(days=today.weekday())
         plan = load_weekly_plan(str(week_start))
         if plan is None:
+            # Mock plan for first-time users
             return {
                 "week_start_date": str(week_start),
                 "total_planned_hours": 8.0,
@@ -616,7 +667,9 @@ async def get_weekly_plan_preview(
                     {"day": "Sun", "title": "Easy Bike", "duration_minutes": 60},
                 ],
             }
-        return plan
+
+        # Приводим сохранённый план к формату, ожидаемому фронтендом
+        return _format_weekly_plan_for_preview(plan, week_start)
     except Exception as e:
         logger.error("weekly_plan_preview_error", error=str(e))
         raise HTTPException(status_code=500, detail="Unable to load weekly plan")
