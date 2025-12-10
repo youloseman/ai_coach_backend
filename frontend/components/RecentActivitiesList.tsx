@@ -32,20 +32,20 @@ export default function RecentActivitiesList() {
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 animate-pulse"
+            className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 animate-pulse"
           >
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              <div className="w-10 h-10 bg-slate-800 rounded"></div>
               <div className="flex-1 space-y-2">
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+                <div className="h-4 bg-slate-800 rounded w-3/4"></div>
+                <div className="h-3 bg-slate-800 rounded w-1/2"></div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  <div className="h-3 bg-slate-800 rounded"></div>
+                  <div className="h-3 bg-slate-800 rounded"></div>
                 </div>
               </div>
             </div>
@@ -57,8 +57,8 @@ export default function RecentActivitiesList() {
 
   if (error) {
     return (
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
-        <p className="text-sm text-gray-600 dark:text-gray-400">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 text-center">
+        <p className="text-sm text-slate-300">
           Failed to load activities. Please try again later.
         </p>
       </div>
@@ -67,11 +67,11 @@ export default function RecentActivitiesList() {
 
   if (!activities || activities.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 text-center">
+        <p className="text-sm text-slate-300 mb-2">
           No activities yet
         </p>
-        <p className="text-xs text-gray-500 dark:text-gray-500">
+        <p className="text-xs text-slate-500">
           Connect your Strava account and complete some workouts to see them here.
         </p>
       </div>
