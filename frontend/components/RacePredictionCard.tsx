@@ -114,20 +114,6 @@ export function RacePredictionCard() {
       </div>
     );
   }
-    return (
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Trophy className="w-5 h-5 text-amber-400" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Race Prediction
-          </h3>
-        </div>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          Complete more workouts to get race predictions.
-        </p>
-      </div>
-    );
-  }
 
   const getProbabilityColor = (probability?: number) => {
     if (probability === undefined || probability === null) return 'text-slate-400';

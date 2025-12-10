@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { isAuthenticated, logout, getAuthToken } from '@/lib/auth';
-import { profileAPI, goalsAPI, coachAPI, analyticsAPI, stravaAPI, zonesAPI } from '@/lib/api';
+import { profileAPI, goalsAPI, coachAPI, stravaAPI, zonesAPI } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import type { AthleteProfile, Goal, WeeklyPlan, CoachZonesSummary, StravaActivity } from '@/types';
 import { Activity, Calendar, HeartPulse, Target, ClipboardList, LogOut } from 'lucide-react';
