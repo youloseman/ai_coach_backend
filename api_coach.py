@@ -1480,7 +1480,18 @@ async def coach_weekly_report_email(
     """
 
     subject = req.subject or f"AI Coach – Weekly report (week starting {week_start_str})"
-    send_html_email(EMAIL_TO, subject, html_body)
+
+    # Try to send email, but don't fail the whole request if email provider
+    # is not configured or returns an error. This is critical in hosted
+    # environments (Railway/Vercel) where SMTP/Resend may be missing.
+    email_sent = False
+    email_error: Optional[str] = None
+    try:
+        send_html_email(EMAIL_TO, subject, html_body)
+        email_sent = True
+    except Exception as e:  # noqa: BLE001
+        logger.error("weekly_report_email_send_error", error=str(e))
+        email_error = str(e)
 
     save_weekly_report(
         week_start_str,
@@ -1494,12 +1505,18 @@ async def coach_weekly_report_email(
             "training_load_analytics": training_load_analysis,
             "fatigue_analysis": fatigue_analysis,
             "performance_prediction": prediction_result,
+            "email_sent": email_sent,
+            "email_error": email_error,
         },
     )
 
     return {
         "status": "ok",
-        "message": f"Weekly report sent to {EMAIL_TO}",
+        "message": (
+            f"Weekly report sent to {EMAIL_TO}"
+            if email_sent
+            else "Weekly report generated, but email sending failed"
+        ),
         "week_start_date": week_start_str,
         "planned_hours": total_hours,
         "progress_weeks": summary.get("weeks_analyzed", 0),
@@ -1507,9 +1524,11 @@ async def coach_weekly_report_email(
         "readiness_label": evaluation.get("score_label", ""),
         "coach_feedback": coach_feedback,
         "plan_vs_fact": plan_vs_fact_summary,
-        "training_load_analytics": training_load_analysis,
+        "training_load_analytics": training_load_analytics,
         "fatigue_analysis": fatigue_analysis,
         "performance_prediction": prediction_result,
+        "email_sent": email_sent,
+        "email_error": email_error,
     }
 
 
