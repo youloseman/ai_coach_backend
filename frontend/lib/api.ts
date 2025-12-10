@@ -400,6 +400,22 @@ export const analyticsAPI = {
     });
     return response.data;
   },
+
+  // New PMC endpoints
+  getPMC: async (params?: {
+    startDate?: string;
+    endDate?: string;
+    ltsDays?: number;
+    stsDays?: number;
+  }) => {
+    const response = await api.get('/analytics/pmc', { params });
+    return response.data;
+  },
+
+  getSummary: async () => {
+    const response = await api.get('/analytics/summary');
+    return response.data;
+  },
 };
 
 // ---------- NUTRITION ----------
