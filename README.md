@@ -1,3 +1,84 @@
+AI Triathlon Coach
+==================
+
+End-to-end coaching platform that generates training plans, calculates training load (TSS/PMC), manages nutrition targets, syncs activities (e.g., Strava), and surfaces insights on a Next.js dashboard.
+
+## Architecture
+- Backend: FastAPI + SQLAlchemy + Pydantic, PostgreSQL, optional Redis cache.
+- Frontend: Next.js/React (App Router) + TypeScript + Tailwind + React Query.
+- AI: OpenAI GPT-4o prompts assembled from modular sport templates.
+- Background / scripts: Strava import, weekly report email, TSS recalculation.
+
+## Core Features
+- Weekly & daily AI plans: Uses athlete profile, goals, history, and sport-specific prompt modules.
+- Nutrition: Set daily targets and generate daily nutrition plans.
+- Training load: Auto-calculates TSS per activity (bike/run/swim) and exposes PMC (CTL/ATL/TSB/RR) analytics.
+- Training zones: PATCH to update FTP/threshold pace/CSS/max/rest HR; zones used for TSS.
+- Activity import: Upserts activities and auto-computes TSS on save.
+- Reporting: Weekly report email (Resend/SMTP) with dashboard preview.
+- Dashboard: PMC chart, Fitness Summary, Form Status, Race Prediction, Weekly Plan preview, Recent Activities (dark theme).
+
+## Backend Setup
+1) Prereqs: Python 3.10+, PostgreSQL; optional Redis.  
+2) Install:
+```
+cd backend
+python -m venv .venv && source .venv/bin/activate   # or .venv\\Scripts\\activate on Windows
+pip install -r requirements.txt
+```
+3) Env vars (example):
+- `DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/ai_coach`
+- `OPENAI_API_KEY=...`
+- `EMAIL_FROM`, `EMAIL_TO`, and provider creds (Resend/API/SMTP)
+- `FRONTEND_URL`, `BACKEND_URL`, `STRAVA_CLIENT_ID/SECRET` (if using Strava)
+4) DB init/migrations:
+```
+alembic upgrade head
+```
+5) Run API:
+```
+uvicorn main:app --reload
+```
+
+## Frontend Setup
+```
+cd frontend
+npm install
+npm run dev
+```
+Env: set NEXT_PUBLIC_BACKEND_URL (and auth tokens if applicable).
+
+## Key Endpoints (non-exhaustive)
+- `GET /analytics/pmc`, `GET /analytics/summary` — PMC data and fitness summary.
+- `PATCH /profile/training-zones` — update training zones (FTP, threshold pace, CSS, max/rest HR).
+- `GET /coach/weekly_plan` — generate weekly plan; preview formatted for dashboard.
+- `POST /coach/weekly_report_email` — send weekly report email (returns status even on provider failure).
+- `GET /nutrition/targets`, `PUT /nutrition/targets`, `GET /nutrition/generate` — nutrition targets and daily plan.
+
+## TSS & PMC
+- TSS auto-calculated on activity upsert via `services/activity_service.calculate_and_save_tss`.
+- Script to backfill TSS: `python app/scripts/recalculate_tss.py` (requires zones set).
+- PMC calculation: `analytics/pmc.py` (CTL/ATL/TSB/RR) exposed via `/analytics/pmc`.
+
+## Training Zones
+- Backend schema: `TrainingZonesUpdate` (ftp, threshold_pace_min_per_km, css_pace_100m_seconds, max_hr, rest_hr).
+- Frontend: `components/settings/TrainingZones.tsx` to view/edit zones; API client `profileAPI.updateTrainingZones`.
+
+## Testing
+- Backend: `pytest` (includes `tests/test_pmc.py`, `tests/test_tss.py`).
+- Frontend: `npm run lint`, `npm run build`.
+
+## Operations Notes
+- Ensure DB schema exists before running scripts (e.g., activities table for TSS backfill).
+- Weekly email gracefully handles provider failures and still returns JSON status.
+- For Strava imports, confirm tokens and webhooks are configured; TSS fills automatically if zones exist.
+
+## Where to look
+- Prompts: `prompts/` (sport modules, builder).
+- Analytics: `analytics/pmc.py`, `analytics/tss.py`.
+- Coach API: `api_coach.py`.
+- Nutrition API: `api_nutrition.py`.
+- Dashboard: `frontend/app/dashboard/page.tsx`, components under `frontend/components/`.
 ## AI Triathlon Coach — обзор проекта
 
 AI Triathlon Coach — это личный AI‑тренер для триатлета, который:
