@@ -1,3 +1,80 @@
+AI Triathlon Coach — Architecture
+=================================
+
+This document explains how the system is structured and how the main subsystems collaborate across backend, AI prompt pipeline, analytics (TSS/PMC), data layer, scripts, and frontend.
+
+## High-Level View
+- **Frontend** (Next.js/React, TypeScript, Tailwind, React Query): dashboard, settings, plan generation UI, analytics visualizations.
+- **Backend** (FastAPI, SQLAlchemy, Pydantic): API surface, authentication, plan/nutrition generation, analytics, email/reporting, Strava import, training zones.
+- **AI Layer** (OpenAI GPT-4o): prompt builder composes sport-specific modules + user context to generate plans and assessments.
+- **Data**: PostgreSQL (primary), optional Redis cache; Strava as external data source.
+- **Background/Scripts**: TSS recalculation, Strava sync, weekly reports.
+
+## Backend Modules
+- `main.py`: App bootstrap, routers include, CORS/middleware.
+- `api_coach.py`: Weekly plan generation, weekly report email, weekly plan preview formatting.
+- `api_nutrition.py`: Nutrition targets CRUD and daily plan generation.
+- `api_analytics.py`: PMC and fitness summary endpoints.
+- `api_user.py`: Profile updates, training zones PATCH.
+- `crud.py`: Data persistence helpers (activities, profiles, etc.); calls TSS auto-calc on activity upsert.
+- `services/activity_service.py`: `calculate_and_save_tss` orchestrates TSS calculation and persistence.
+- `analytics/pmc.py`: PMCCalculator (CTL/ATL/TSB/RR).
+- `analytics/tss.py`: Bike/run/swim TSS calculators and auto selector.
+- `prompts/`:
+  - `builder.py`: `build_coach_prompt` composes base prompt + sport module + user context (goals, history, zones).
+  - `sport_modules/*.py`: Domain guidance per sport (triathlon, swimming, etc.).
+- `scripts/recalculate_tss.py`: Backfill/migrate TSS for existing activities (requires training zones).
+- `tests/`: PMC and TSS unit tests.
+
+## Data Flow (Core Scenarios)
+1) **Strava import / activity upsert**
+   - Activity ingested via webhook/import → `crud.upsert_activity` → `services.calculate_and_save_tss` → `analytics.tss.auto_calculate_tss` (uses user training zones) → activity.tss stored.
+2) **PMC analytics**
+   - `/analytics/pmc` fetches activities with TSS → `PMCCalculator.calculate_pmc` → returns series CTL/ATL/TSB/RR.
+   - `/analytics/summary` wraps PMC data into current fitness snapshot.
+3) **Weekly plan generation**
+   - `/coach/weekly_plan` builds prompt via `build_coach_prompt` (uses athlete profile, goals, history, zones) → GPT plan → `_format_weekly_plan_for_preview` maps GPT fields to frontend shape.
+4) **Nutrition daily plan**
+   - `/nutrition/generate` returns a daily plan using stored targets or defaults; targets set via `/nutrition/targets`.
+5) **Training zones management**
+   - `/profile/training-zones` PATCH updates ftp/threshold pace/css/max/rest HR on the athlete profile; downstream TSS uses these.
+6) **Weekly report email**
+   - `/coach/weekly_report_email` renders report, attempts email send (Resend/SMTP); errors are caught and surfaced in response (non-500).
+
+## Data Model (key tables)
+- Users, AthleteProfile (training zones stored per discipline fields), Activities (includes TSS), Plans/Reports (stored outputs), Nutrition targets.
+Note: Ensure migrations create the activities table before running TSS backfill.
+
+## AI Prompt System
+- Base system prompt + sport module (triathlon/swim/etc.) + athlete context (profile, goals, zones, history, constraints) assembled in `prompts/builder.py`.
+- Output consumed by coach APIs for weekly plans/assessments; adapter aligns GPT fields to frontend expectations.
+
+## Frontend Architecture
+- App Router; pages under `frontend/app/dashboard/page.tsx`.
+- API client: `frontend/lib/api.ts` (nutrition, coach, analytics, profile/training-zones).
+- State/data: React Query for fetching/mutations; invalidations after plan generation/export/email to refresh weekly plan preview.
+- Components:
+  - Analytics: `components/charts/PMCChart.tsx`, `components/analytics/FitnessSummary.tsx`.
+  - Status/Prediction: `components/FormStatusCard.tsx`, `components/RacePredictionCard.tsx`.
+  - Plans: `components/WeeklyPlanPreview` (preview data shape from backend).
+  - Activities: `components/RecentActivitiesList.tsx`, `components/ActivityCard.tsx` (dark theme).
+  - Settings: `components/settings/TrainingZones.tsx` for zones input.
+UI is dark-themed for consistency.
+
+## Deployment/Ops
+- Backend served via FastAPI (uvicorn); configure `DATABASE_URL`, OpenAI, email provider, FRONTEND/BACKEND URLs, Strava credentials.
+- Migrations: `alembic upgrade head` before running scripts or analytics.
+- Scripts: `python app/scripts/recalculate_tss.py` (set training zones first).
+- Resilience: Weekly email endpoint returns JSON status even on provider failure; analytics endpoints tolerate missing data.
+
+## Testing
+- Backend: `pytest` (notably `tests/test_pmc.py`, `tests/test_tss.py`).
+- Frontend: `npm run lint`, `npm run build`.
+
+## Extensibility Notes
+- Add sports: create a new `prompts/sport_modules/<sport>.py` and wire into builder selection.
+- Add metrics: extend `analytics/tss.py` and `analytics/pmc.py`; expose via `api_analytics.py`.
+- Add UI cards: extend dashboard page and fetch via `lib/api.ts` with React Query patterns.
 # Архитектура проекта AI Triathlon Coach
 
 ## 📋 Содержание
