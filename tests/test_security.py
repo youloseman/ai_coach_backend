@@ -8,11 +8,27 @@ from fastapi.testclient import TestClient
 
 from main import app
 
-from auth import create_access_token
+from auth import create_access_token, get_current_user
 
 
 
 client = TestClient(app)
+
+
+class _DummyUser:
+    def __init__(self, user_id: int):
+        self.id = user_id
+
+
+@pytest.fixture(autouse=True)
+def _override_auth_dependency():
+    """
+    These are access-control tests for the calendar download endpoint.
+    They should not require a real DB user in CI.
+    """
+    app.dependency_overrides[get_current_user] = lambda: _DummyUser(1)
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 class TestCalendarSecurity:
@@ -55,9 +71,11 @@ class TestCalendarSecurity:
         """Reject directory traversal attempts"""
         token = create_access_token({"user_id": 1, "email": "test@example.com"})
         
-        # Try directory traversal
+        # Try directory traversal.
+        # Note: forward slashes would not match the route (path params don't include "/"),
+        # so we use backslashes which stay within the same segment.
         response = client.get(
-            "/downloads/calendar/user_1_../../etc/passwd",
+            "/downloads/calendar/user_1_..\\..\\etc\\passwd",
             headers={"Authorization": f"Bearer {token}"}
         )
         
