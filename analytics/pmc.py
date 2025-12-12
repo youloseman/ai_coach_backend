@@ -67,9 +67,6 @@ class PMCCalculator:
         start_date = datetime.strptime(activities[0]["date"], "%Y-%m-%d")
         end_date = datetime.strptime(activities[-1]["date"], "%Y-%m-%d")
         
-        # Extend 56 days for proper decay calculation
-        end_date += timedelta(days=56)
-        
         # Create arrays
         days = (end_date - start_date).days + 1
         dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") 
@@ -106,13 +103,16 @@ class PMCCalculator:
             # Positive TSB = fresh/rested, Negative TSB = fatigued
             tsb[day] = ctl[day] - atl[day]
             
-            # Ramp Rate - sum of daily CTL changes over sts_days period
-            # Shows how quickly fitness is increasing
-            if day > 0 and day <= self.sts_days:
-                rr[day] = sum(ctl[i] - ctl[i-1] for i in range(1, day + 1))
-            elif day > self.sts_days:
-                rr[day] = sum(ctl[i] - ctl[i-1] 
-                             for i in range(day - self.sts_days, day + 1))
+            # Ramp Rate - CORRECTED FORMULA
+            # RR = CTL points per week over the last sts_days window
+            # Formula: RR = (CTL_today - CTL_7days_ago) / 7 * 7 = CTL_change / sts_days * 7
+            # TrainingPeaks considers RR > 5-8 as high risk for overtraining
+            if day >= self.sts_days:
+                ctl_change = ctl[day] - ctl[day - self.sts_days]
+                rr[day] = (ctl_change / self.sts_days) * 7.0
+            else:
+                # Not enough history yet
+                rr[day] = 0.0
         
         return {
             "dates": dates,
@@ -142,14 +142,9 @@ class PMCCalculator:
         if not pmc["dates"]:
             return None
         
-        # Get latest non-zero index (current day)
-        latest_idx = len(pmc["dates"]) - 1
-        
-        # Find last day with actual training (non-zero CTL growth)
-        for i in range(latest_idx, 0, -1):
-            if pmc["ctl"][i] > 0:
-                latest_idx = i
-                break
+        # Current metrics should be computed at the last activity date
+        last_activity_date = max(a["date"] for a in activities)
+        latest_idx = pmc["dates"].index(last_activity_date)
         
         return {
             "date": pmc["dates"][latest_idx],
@@ -177,7 +172,7 @@ class PMCCalculator:
             return "fresh"
         elif tsb > -10:
             return "neutral"
-        elif tsb > -30:
+        elif tsb >= -30:
             return "optimal_overload"
         else:
             return "high_risk"

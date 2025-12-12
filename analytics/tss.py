@@ -1,7 +1,5 @@
 # analytics/tss.py
 
-import math
-
 def calculate_bike_tss(duration_seconds: float, 
                       normalized_power: float, 
                       ftp: float) -> float:
@@ -9,7 +7,7 @@ def calculate_bike_tss(duration_seconds: float,
     Calculate Bike TSS (Training Stress Score)
     Based on GoldenCheetah BasicRideMetrics.cpp
     
-    Formula: TSS = (duration_hours × NP × IF) / (FTP × 3600) × 100
+    Formula: TSS = duration_hours × (NP/FTP)² × 100 (algebraic simplification of the standard TP/GC formula)
     Where IF (Intensity Factor) = NP / FTP
     
     Args:
@@ -26,8 +24,7 @@ def calculate_bike_tss(duration_seconds: float,
     duration_hours = duration_seconds / 3600.0
     intensity_factor = normalized_power / ftp
     
-    # TSS = (duration × NP × IF) / (FTP × 3600) × 100
-    # Simplified: TSS = duration_hours × IF² × 100
+    # TSS = duration_hours × (NP/FTP)² × 100
     tss = duration_hours * (intensity_factor ** 2) * 100
     
     return round(tss, 1)
@@ -37,8 +34,11 @@ def calculate_run_tss(duration_minutes: float,
                      avg_pace_min_per_km: float,
                      threshold_pace_min_per_km: float) -> float:
     """
-    Calculate Run TSS
-    Based on pace ratio to threshold pace
+    Calculate Run TSS based on pace
+    Based on TrainingPeaks standard formula
+    
+    Formula: TSS = (duration_hours × IF²) × 100
+    Where IF (Intensity Factor) = threshold_pace / avg_pace
     
     Args:
         duration_minutes: Total run time in minutes
@@ -47,25 +47,43 @@ def calculate_run_tss(duration_minutes: float,
     
     Returns:
         TSS score
+    
+    Examples:
+        >>> calculate_run_tss(60, 4.0, 4.0)  # 1 hour at threshold = 100 TSS
+        100.0
+        >>> calculate_run_tss(60, 5.0, 4.0)  # 1 hour easy (5:00 vs 4:00) = 64 TSS
+        64.0
+        >>> calculate_run_tss(60, 3.5, 4.0)  # 1 hour fast (3:30 vs 4:00) = 130 TSS
+        130.6
+    
+    Reference:
+        https://www.trainingpeaks.com/blog/what-is-tss/
     """
+    # Validate inputs
+    try:
+        duration_minutes = float(duration_minutes)
+        avg_pace_min_per_km = float(avg_pace_min_per_km)
+        threshold_pace_min_per_km = float(threshold_pace_min_per_km)
+    except (TypeError, ValueError):
+        return 0.0
+    
     if avg_pace_min_per_km <= 0 or threshold_pace_min_per_km <= 0:
         return 0.0
     
-    # Pace ratio (slower pace = lower ratio)
-    # If threshold is 4:00/km and you run 5:00/km, ratio = 4/5 = 0.8
-    pace_ratio = threshold_pace_min_per_km / avg_pace_min_per_km
+    if duration_minutes <= 0:
+        return 0.0
     
-    # TSS calculation based on intensity
-    # Similar to bike TSS: TSS = duration × IF² × 100
-    if pace_ratio < 0.85:  # Very easy (much slower than threshold)
-        intensity_factor = 0.5
-        tss = duration_minutes * (intensity_factor ** 2) * 100 / 60.0
-    elif pace_ratio > 1.05:  # Faster than threshold (hard intervals)
-        intensity_factor = pace_ratio ** 1.5
-        tss = duration_minutes * (intensity_factor ** 2) * 100 / 60.0
-    else:  # Around threshold
-        intensity_factor = pace_ratio
-        tss = duration_minutes * (intensity_factor ** 2) * 100 / 60.0
+    # Calculate Intensity Factor
+    # IF = threshold_pace / avg_pace
+    # Slower pace (5:00/km) / threshold (4:00/km) = 4/5 = 0.8 = easier
+    # Faster pace (3:30/km) / threshold (4:00/km) = 4/3.5 = 1.14 = harder
+    intensity_factor = threshold_pace_min_per_km / avg_pace_min_per_km
+    intensity_factor = max(0.0, min(intensity_factor, 2.0))
+    
+    # Calculate TSS
+    # TSS = duration_hours × IF² × 100
+    duration_hours = duration_minutes / 60.0
+    tss = duration_hours * (intensity_factor ** 2) * 100
     
     return round(tss, 1)
 
@@ -77,36 +95,39 @@ def calculate_swim_tss(distance_meters: float,
     Calculate Swim TSS
     Based on CSS (Critical Swim Speed)
     
+    Formula: sTSS = duration_hours × (CSS_pace / avg_pace)² × 100
+    
     Args:
         distance_meters: Total distance in meters
         duration_seconds: Total time in seconds
-        css_pace_100m_seconds: CSS pace per 100m (e.g. 90 for 1:30/100m)
+        css_pace_100m_seconds: CSS pace per 100m in seconds (e.g. 90 for 1:30/100m)
     
     Returns:
         TSS score
     """
+    # Validate inputs
+    try:
+        distance_meters = float(distance_meters)
+        duration_seconds = float(duration_seconds)
+        css_pace_100m_seconds = float(css_pace_100m_seconds)
+    except (TypeError, ValueError):
+        return 0.0
+    
     if distance_meters <= 0 or css_pace_100m_seconds <= 0 or duration_seconds <= 0:
         return 0.0
     
     # Calculate average pace per 100m in seconds
     avg_pace_100m = (duration_seconds / distance_meters) * 100.0
     
-    # Pace ratio (faster = higher ratio)
-    # If CSS is 90s/100m and you swim 100s/100m, ratio = 90/100 = 0.9
-    pace_ratio = css_pace_100m_seconds / avg_pace_100m
+    # Calculate Intensity Factor
+    # IF = CSS_pace / avg_pace (both in seconds per 100m)
+    intensity_factor = css_pace_100m_seconds / avg_pace_100m
+    intensity_factor = max(0.0, min(intensity_factor, 2.0))
     
-    duration_minutes = duration_seconds / 60.0
-    
-    # Similar to run TSS
-    if pace_ratio < 0.85:  # Very easy
-        intensity_factor = 0.5
-        tss = duration_minutes * (intensity_factor ** 2) * 100 / 60.0
-    elif pace_ratio > 1.05:  # Faster than CSS (hard intervals)
-        intensity_factor = pace_ratio ** 1.5
-        tss = duration_minutes * (intensity_factor ** 2) * 100 / 60.0
-    else:  # Around CSS
-        intensity_factor = pace_ratio
-        tss = duration_minutes * (intensity_factor ** 2) * 100 / 60.0
+    # Calculate TSS
+    # TSS = duration_hours × IF² × 100
+    duration_hours = duration_seconds / 3600.0
+    tss = duration_hours * (intensity_factor ** 2) * 100
     
     return round(tss, 1)
 
@@ -174,8 +195,8 @@ def auto_calculate_tss(activity_data: dict, user_profile: dict) -> float:
         if distance_m > 0 and css_pace and css_pace > 0:
             return calculate_swim_tss(distance_m, duration_s, css_pace)
     
-    # Fallback: Simple duration-based estimate
-    # 1 hour at moderate intensity ≈ 50-70 TSS
+    # Fallback estimate when sport-specific inputs are missing.
+    # Assumes ~50 TSS per 1 hour (moderate).
     duration_hours = duration_s / 3600.0
-    return round(duration_hours * 60, 1)
+    return round(duration_hours * 50.0, 1)
 

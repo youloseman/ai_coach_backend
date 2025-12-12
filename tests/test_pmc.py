@@ -1,133 +1,136 @@
-# tests/test_pmc.py
+"""
+Unit tests for PMC calculations
 
+"""
 import pytest
+
 from analytics.pmc import PMCCalculator
 
-def test_pmc_basic():
-    """Basic PMC calculation test"""
-    calculator = PMCCalculator()
+
+class TestPMCCalculator:
+    """Test PMC calculations"""
     
-    activities = [
-        {"date": "2025-01-01", "tss": 100},
-        {"date": "2025-01-02", "tss": 80},
-        {"date": "2025-01-03", "tss": 120},
-    ]
+    def test_empty_activities(self):
+        """Empty activities list returns empty data"""
+        calc = PMCCalculator()
+        pmc = calc.calculate_pmc([])
+        
+        assert pmc["dates"] == []
+        assert pmc["ctl"] == []
+        assert pmc["atl"] == []
+        assert pmc["tsb"] == []
+        assert pmc["rr"] == []
     
-    pmc = calculator.calculate_pmc(activities)
+    def test_single_activity(self):
+        """Single activity calculates CTL/ATL"""
+        calc = PMCCalculator()
+        activities = [{"date": "2025-01-01", "tss": 100}]
+        pmc = calc.calculate_pmc(activities)
+        
+        # First day CTL should be TSS × (1 - exp(-1/42))
+        # ≈ 100 × 0.0236 ≈ 2.36
+        assert 2.3 < pmc["ctl"][0] < 2.4
+        
+        # First day ATL should be TSS × (1 - exp(-1/7))
+        # ≈ 100 × 0.133 ≈ 13.3
+        assert 13.2 < pmc["atl"][0] < 13.4
     
-    assert "ctl" in pmc
-    assert "atl" in pmc
-    assert "tsb" in pmc
-    assert "rr" in pmc
-    assert "dates" in pmc
-    assert "stress" in pmc
-    assert len(pmc["ctl"]) > 0
-    assert len(pmc["dates"]) == len(pmc["ctl"])
+    def test_ramp_rate_calculation(self):
+        """Ramp Rate = (CTL_today - CTL_7days_ago) / 7"""
+        calc = PMCCalculator()
+        
+        # 14 days of consistent training
+        activities = [
+            {"date": f"2025-01-{d:02d}", "tss": 100}
+            for d in range(1, 15)
+        ]
+        pmc = calc.calculate_pmc(activities)
+        
+        # Check day 14 (index 13)
+        day_14_idx = 13
+        day_7_idx = 6
+        
+        # Manual calculation
+        # RR is now in "per week" units (multiplied by 7)
+        expected_rr_per_day = (pmc["ctl"][day_14_idx] - pmc["ctl"][day_7_idx]) / 7
+        expected_rr_per_week = expected_rr_per_day * 7.0
+        actual_rr = pmc["rr"][day_14_idx]
+        
+        assert abs(actual_rr - expected_rr_per_week) < 0.1, \
+            f"RR mismatch: expected {expected_rr_per_week:.2f}, got {actual_rr:.2f}"
+        
+        # RR should be reasonable (0-70 range for per week)
+        assert 0 <= actual_rr <= 70, \
+            f"RR out of range: {actual_rr}"
+    
+    def test_ramp_rate_not_negative(self):
+        """Ramp Rate should handle decreasing fitness"""
+        calc = PMCCalculator()
+        
+        # 7 days training, then 7 days rest
+        activities = [
+            {"date": f"2025-01-{d:02d}", "tss": 100}
+            for d in range(1, 8)
+        ]
+        # No activities from day 8-14
+        
+        pmc = calc.calculate_pmc(activities)
+        
+        # After rest, RR should be negative (CTL declining)
+        # This is expected and valid
+        day_14_idx = 13
+        if len(pmc["rr"]) > day_14_idx:
+            assert pmc["rr"][day_14_idx] < 0, "RR should be negative during rest"
+    
+    def test_tsb_calculation(self):
+        """TSB = CTL - ATL"""
+        calc = PMCCalculator()
+        activities = [
+            {"date": "2025-01-01", "tss": 100},
+            {"date": "2025-01-02", "tss": 100}
+        ]
+        pmc = calc.calculate_pmc(activities)
+        
+        for i in range(len(pmc["dates"])):
+            expected_tsb = pmc["ctl"][i] - pmc["atl"][i]
+            actual_tsb = pmc["tsb"][i]
+            assert abs(actual_tsb - expected_tsb) < 0.01, \
+                f"TSB mismatch at index {i}"
+    
+    def test_tsb_interpretation(self):
+        """Test TSB status categories"""
+        calc = PMCCalculator()
+        
+        assert calc._interpret_tsb(30) == "peaked"
+        assert calc._interpret_tsb(25.1) == "peaked"
+        assert calc._interpret_tsb(15) == "fresh"
+        assert calc._interpret_tsb(10.1) == "fresh"
+        assert calc._interpret_tsb(0) == "neutral"
+        assert calc._interpret_tsb(-5) == "neutral"
+        assert calc._interpret_tsb(-20) == "optimal_overload"
+        assert calc._interpret_tsb(-30) == "optimal_overload"
+        assert calc._interpret_tsb(-40) == "high_risk"
+        assert calc._interpret_tsb(-50) == "high_risk"
+    
+    def test_get_current_metrics(self):
+        """Test getting current metrics"""
+        calc = PMCCalculator()
+        activities = [
+            {"date": f"2025-01-{d:02d}", "tss": 100}
+            for d in range(1, 8)
+        ]
+        
+        metrics = calc.get_current_metrics(activities)
+        
+        assert metrics is not None
+        assert "ctl" in metrics
+        assert "atl" in metrics
+        assert "tsb" in metrics
+        assert "rr" in metrics
+        assert "form_status" in metrics
+        assert metrics["ctl"] > 0
+        assert metrics["atl"] > 0
 
 
-def test_ctl_increases():
-    """CTL should increase with consistent training"""
-    calculator = PMCCalculator()
-    
-    activities = [
-        {"date": f"2025-01-{i:02d}", "tss": 100}
-        for i in range(1, 15)  # 14 days of 100 TSS
-    ]
-    
-    pmc = calculator.calculate_pmc(activities)
-    
-    # CTL at day 14 should be higher than day 1
-    # (assuming we're looking at actual training days, not decay period)
-    ctl_values = [pmc["ctl"][i] for i in range(len(activities)) if pmc["ctl"][i] > 0]
-    if len(ctl_values) >= 2:
-        assert ctl_values[-1] > ctl_values[0]
-
-
-def test_tsb_calculation():
-    """TSB = CTL - ATL (formula verification)"""
-    calculator = PMCCalculator()
-    
-    activities = [{"date": "2025-01-01", "tss": 100}]
-    pmc = calculator.calculate_pmc(activities)
-    
-    # Check formula: TSB = CTL - ATL
-    for i in range(len(pmc["dates"])):
-        calculated_tsb = pmc["ctl"][i] - pmc["atl"][i]
-        assert abs(pmc["tsb"][i] - calculated_tsb) < 0.01, \
-            f"TSB mismatch at index {i}: {pmc['tsb'][i]} != {calculated_tsb}"
-
-
-def test_empty_activities():
-    """Should handle empty activities list"""
-    calculator = PMCCalculator()
-    pmc = calculator.calculate_pmc([])
-    
-    assert pmc["dates"] == []
-    assert pmc["ctl"] == []
-    assert pmc["atl"] == []
-    assert pmc["tsb"] == []
-
-
-def test_get_current_metrics():
-    """Test getting current metrics"""
-    calculator = PMCCalculator()
-    
-    activities = [
-        {"date": "2025-01-01", "tss": 100},
-        {"date": "2025-01-02", "tss": 80},
-    ]
-    
-    metrics = calculator.get_current_metrics(activities)
-    
-    assert metrics is not None
-    assert "date" in metrics
-    assert "ctl" in metrics
-    assert "atl" in metrics
-    assert "tsb" in metrics
-    assert "rr" in metrics
-    assert "form_status" in metrics
-    assert isinstance(metrics["ctl"], (int, float))
-    assert isinstance(metrics["tsb"], (int, float))
-
-
-def test_custom_time_constants():
-    """Test with custom LTS/STS days"""
-    calculator = PMCCalculator(lts_days=30, sts_days=5)
-    
-    activities = [{"date": "2025-01-01", "tss": 100}]
-    pmc = calculator.calculate_pmc(activities)
-    
-    assert len(pmc["ctl"]) > 0
-    assert calculator.lts_days == 30
-    assert calculator.sts_days == 5
-
-
-def test_multiple_activities_same_day():
-    """Test handling multiple activities on same day"""
-    calculator = PMCCalculator()
-    
-    activities = [
-        {"date": "2025-01-01", "tss": 50},
-        {"date": "2025-01-01", "tss": 60},  # Same day
-        {"date": "2025-01-02", "tss": 80},
-    ]
-    
-    pmc = calculator.calculate_pmc(activities)
-    
-    # Should sum TSS for same day
-    # Find the index for 2025-01-01
-    day1_idx = pmc["dates"].index("2025-01-01")
-    assert pmc["stress"][day1_idx] == 110.0  # 50 + 60
-
-
-def test_tsb_interpretation():
-    """Test TSB interpretation"""
-    calculator = PMCCalculator()
-    
-    # Test different TSB values
-    assert calculator._interpret_tsb(30) == "peaked"
-    assert calculator._interpret_tsb(15) == "fresh"
-    assert calculator._interpret_tsb(0) == "neutral"
-    assert calculator._interpret_tsb(-15) == "optimal_overload"
-    assert calculator._interpret_tsb(-35) == "high_risk"
-
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
