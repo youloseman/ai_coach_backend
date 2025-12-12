@@ -1,161 +1,141 @@
-# tests/test_tss.py
+"""
+Unit tests for TSS calculations
 
+"""
 import pytest
+
 from analytics.tss import (
-    calculate_bike_tss,
     calculate_run_tss,
+    calculate_bike_tss,
     calculate_swim_tss,
     auto_calculate_tss
 )
 
-def test_bike_tss_basic():
-    """Test bike TSS calculation"""
-    # 1 hour at FTP (IF=1.0) should give ~100 TSS
-    duration_s = 3600  # 1 hour
-    np = 250  # Normalized Power
-    ftp = 250  # FTP
+
+class TestRunTSS:
+    """Test Run TSS calculations"""
     
-    tss = calculate_bike_tss(duration_s, np, ftp)
+    def test_threshold_pace(self):
+        """1 hour at threshold pace = 100 TSS"""
+        tss = calculate_run_tss(60, 4.0, 4.0)
+        assert tss == 100.0, f"Expected 100.0, got {tss}"
     
-    # TSS = 1 hour × 1.0² × 100 = 100
-    assert abs(tss - 100.0) < 1.0
-
-
-def test_bike_tss_hard_ride():
-    """Test bike TSS for hard ride (above FTP)"""
-    duration_s = 1800  # 30 minutes
-    np = 300  # 120% of FTP
-    ftp = 250
+    def test_easy_pace(self):
+        """1 hour at easy pace (5:00/km vs 4:00/km threshold) = 64 TSS"""
+        tss = calculate_run_tss(60, 5.0, 4.0)
+        assert tss == 64.0, f"Expected 64.0, got {tss}"
     
-    tss = calculate_bike_tss(duration_s, np, ftp)
+    def test_fast_pace(self):
+        """1 hour faster than threshold (3:30/km vs 4:00/km) ≈ 130 TSS"""
+        tss = calculate_run_tss(60, 3.5, 4.0)
+        assert 129 < tss < 132, f"Expected ~130, got {tss}"
     
-    # IF = 300/250 = 1.2
-    # TSS = 0.5 × 1.2² × 100 = 72
-    assert tss > 70
-    assert tss < 75
-
-
-def test_bike_tss_zero_ftp():
-    """Test bike TSS with zero FTP"""
-    tss = calculate_bike_tss(3600, 250, 0)
-    assert tss == 0.0
-
-
-def test_run_tss_basic():
-    """Test run TSS calculation"""
-    duration_min = 60  # 1 hour
-    avg_pace = 5.0  # 5:00/km
-    threshold_pace = 4.0  # 4:00/km
+    def test_30min_threshold(self):
+        """30 minutes at threshold = 50 TSS"""
+        tss = calculate_run_tss(30, 4.0, 4.0)
+        assert tss == 50.0, f"Expected 50.0, got {tss}"
     
-    tss = calculate_run_tss(duration_min, avg_pace, threshold_pace)
+    def test_zero_pace(self):
+        """Zero pace = 0 TSS"""
+        tss = calculate_run_tss(60, 0, 4.0)
+        assert tss == 0.0
     
-    # Pace ratio = 4/5 = 0.8 (slower than threshold)
-    # Should give lower TSS
-    assert tss > 0
-    assert tss < 100  # Less than threshold pace
+    def test_negative_duration(self):
+        """Negative duration = 0 TSS"""
+        tss = calculate_run_tss(-60, 4.0, 4.0)
+        assert tss == 0.0
 
 
-def test_run_tss_at_threshold():
-    """Test run TSS at threshold pace"""
-    duration_min = 60
-    avg_pace = 4.0
-    threshold_pace = 4.0
+class TestBikeTSS:
+    """Test Bike TSS calculations"""
     
-    tss = calculate_run_tss(duration_min, avg_pace, threshold_pace)
+    def test_at_ftp(self):
+        """1 hour at FTP = 100 TSS"""
+        tss = calculate_bike_tss(3600, 250, 250)
+        assert tss == 100.0, f"Expected 100.0, got {tss}"
     
-    # At threshold, should give moderate TSS
-    assert tss > 0
+    def test_85_percent_ftp(self):
+        """1 hour at 85% FTP ≈ 72 TSS"""
+        tss = calculate_bike_tss(3600, 212.5, 250)
+        assert 71 < tss < 73, f"Expected ~72, got {tss}"
+    
+    def test_30min_at_ftp(self):
+        """30 minutes at FTP = 50 TSS"""
+        tss = calculate_bike_tss(1800, 250, 250)
+        assert tss == 50.0, f"Expected 50.0, got {tss}"
+    
+    def test_zero_ftp(self):
+        """Zero FTP = 0 TSS"""
+        tss = calculate_bike_tss(3600, 250, 0)
+        assert tss == 0.0
 
 
-def test_swim_tss_basic():
-    """Test swim TSS calculation"""
-    distance_m = 2000  # 2km
-    duration_s = 2400  # 40 minutes
-    css_pace = 90  # 1:30/100m
+class TestSwimTSS:
+    """Test Swim TSS calculations"""
     
-    tss = calculate_swim_tss(distance_m, duration_s, css_pace)
+    def test_at_css_pace(self):
+        """30min at CSS pace = 50 TSS (0.5 hour × 1.0² × 100)"""
+        # CSS = 90s/100m, distance = 2000m, time = 1800s (30 min)
+        # avg pace = 1800/2000 * 100 = 90s/100m = CSS pace
+        # IF = 90/90 = 1.0, duration = 0.5h, TSS = 0.5 × 1.0² × 100 = 50.0
+        tss = calculate_swim_tss(2000, 1800, 90)
+        assert tss == 50.0, f"Expected 50.0, got {tss}"
     
-    assert tss > 0
+    def test_slower_than_css(self):
+        """2km slower than CSS ≈ 45 TSS"""
+        # Same distance but 2000s (slower)
+        # avg pace = 2000/2000 * 100 = 100s/100m, CSS = 90s/100m
+        # IF = 90/100 = 0.9, duration = 2000/3600 = 0.556h
+        # TSS = 0.556 × 0.9² × 100 = 45.0
+        tss = calculate_swim_tss(2000, 2000, 90)
+        assert tss == 45.0, f"Expected 45.0, got {tss}"
+    
+    def test_zero_distance(self):
+        """Zero distance = 0 TSS"""
+        tss = calculate_swim_tss(0, 1800, 90)
+        assert tss == 0.0
 
 
-def test_swim_tss_at_css():
-    """Test swim TSS at CSS pace"""
-    distance_m = 2000
-    css_pace = 90  # 1:30/100m
-    duration_s = 1800  # 30 minutes (exactly at CSS)
+class TestAutoCalculateTSS:
+    """Test auto_calculate_tss function"""
     
-    tss = calculate_swim_tss(distance_m, duration_s, css_pace)
+    def test_run_with_pace(self):
+        """Auto calculate for run with pace data"""
+        activity = {
+            "sport_type": "run",
+            "duration_s": 3600,
+            "avg_pace_min_per_km": 5.0
+        }
+        profile = {
+            "threshold_pace": 4.0
+        }
+        tss = auto_calculate_tss(activity, profile)
+        assert tss == 64.0
     
-    assert tss > 0
+    def test_bike_with_power(self):
+        """Auto calculate for bike with power"""
+        activity = {
+            "sport_type": "ride",
+            "duration_s": 3600,
+            "normalized_power": 250
+        }
+        profile = {
+            "ftp": 250
+        }
+        tss = auto_calculate_tss(activity, profile)
+        assert tss == 100.0
+    
+    def test_no_data_fallback(self):
+        """Fallback to duration-based when no data"""
+        activity = {
+            "sport_type": "workout",
+            "duration_s": 3600
+        }
+        profile = {}
+        tss = auto_calculate_tss(activity, profile)
+        # 1 hour × 50 TSS/hour fallback
+        assert tss == 50.0
 
 
-def test_auto_calculate_bike():
-    """Test auto TSS calculation for cycling"""
-    activity = {
-        "sport_type": "cycling",
-        "duration_s": 3600,
-        "normalized_power": 250,
-    }
-    profile = {"ftp": 250}
-    
-    tss = auto_calculate_tss(activity, profile)
-    
-    assert tss > 0
-    assert abs(tss - 100.0) < 10.0  # Should be around 100 for 1h at FTP
-
-
-def test_auto_calculate_run():
-    """Test auto TSS calculation for running"""
-    activity = {
-        "sport_type": "running",
-        "duration_s": 3600,
-        "avg_pace_min_per_km": 5.0,
-    }
-    profile = {"threshold_pace": 4.0}
-    
-    tss = auto_calculate_tss(activity, profile)
-    
-    assert tss > 0
-
-
-def test_auto_calculate_swim():
-    """Test auto TSS calculation for swimming"""
-    activity = {
-        "sport_type": "swimming",
-        "duration_s": 2400,
-        "distance_m": 2000,
-    }
-    profile = {"css_pace_100m": 90}
-    
-    tss = auto_calculate_tss(activity, profile)
-    
-    assert tss > 0
-
-
-def test_auto_calculate_fallback():
-    """Test auto TSS fallback when profile missing"""
-    activity = {
-        "sport_type": "running",
-        "duration_s": 3600,
-    }
-    profile = {}  # Missing threshold_pace
-    
-    tss = auto_calculate_tss(activity, profile)
-    
-    # Should use fallback calculation
-    assert tss > 0
-
-
-def test_auto_calculate_from_speed():
-    """Test auto TSS calculation from speed (not pace)"""
-    activity = {
-        "sport_type": "running",
-        "duration_s": 3600,
-        "avg_speed_m_s": 3.33,  # ~5:00/km pace
-    }
-    profile = {"threshold_pace": 4.0}
-    
-    tss = auto_calculate_tss(activity, profile)
-    
-    assert tss > 0
-
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

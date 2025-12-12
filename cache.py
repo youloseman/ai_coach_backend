@@ -157,6 +157,9 @@ class RedisCache:
 # Global cache instance
 cache = RedisCache()
 
+# Export redis_client for direct access
+redis_client = cache.client if cache.enabled else None
+
 
 # Cache key generators
 def strava_activities_key(user_id: int, weeks: int) -> str:

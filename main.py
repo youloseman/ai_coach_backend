@@ -1,5 +1,4 @@
 from typing import Optional
-import base64
 import os
 
 from fastapi import FastAPI, HTTPException, Depends, Request, Query
@@ -647,6 +646,54 @@ async def root():
     """)
 
 
+@app.get("/strava/connect")
+async def strava_connect(
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Create OAuth state token and redirect to Strava authorization.
+    Security: Uses JWT token instead of base64 for state parameter.
+    """
+    from fastapi.responses import RedirectResponse
+    
+    # Create state data with user_id
+    state_data = {
+        "user_id": current_user.id,
+        "timestamp": dt.datetime.utcnow().isoformat()
+    }
+    
+    # Create secure state with JWT (not base64!)
+    from auth import create_access_token
+    from datetime import timedelta
+    
+    state = create_access_token(
+        data=state_data,
+        expires_delta=timedelta(minutes=10)
+    )
+    
+    # Store state in Redis for additional verification
+    from cache import redis_client
+    import json
+    if redis_client:
+        redis_client.setex(
+            f"oauth_state:{state}",
+            600,  # 10 minutes expiry
+            json.dumps(state_data)
+        )
+    
+    # Build Strava authorization URL
+    auth_url = (
+        f"https://www.strava.com/oauth/authorize"
+        f"?client_id={STRAVA_CLIENT_ID}"
+        f"&redirect_uri={STRAVA_REDIRECT_URI}"
+        f"&response_type=code"
+        f"&scope=read,activity:read_all"
+        f"&state={state}"
+    )
+    
+    return RedirectResponse(url=auth_url, status_code=302)
+
+
 @app.get("/auth/strava/login")
 async def strava_login(
     state: Optional[str] = None,
@@ -682,7 +729,7 @@ async def strava_callback(
     Обратный вызов от Strava после авторизации.
     Сохраняет токены Strava в БД для текущего пользователя.
     
-    Uses 'state' parameter to pass JWT token (encoded in base64) for user identification.
+    Uses 'state' parameter with JWT token for secure user identification.
     """
     if error:
         raise HTTPException(status_code=400, detail=f"Strava returned error: {error}")
@@ -690,21 +737,37 @@ async def strava_callback(
     if not code:
         raise HTTPException(status_code=400, detail="Missing 'code' parameter from Strava")
     
-    # Extract user_id from state parameter (JWT token encoded in base64)
-    # If state is not provided, try to get token from Authorization header
+    # Verify state token with JWT
+    from auth import verify_token
+    
     user_id = None
     
     if state:
         try:
-            # Decode base64 state parameter
-            token = base64.b64decode(state).decode('utf-8')
-            from auth import decode_access_token
-            payload = decode_access_token(token)
-            if payload:
-                user_id = payload.get("sub")
-                logger.info("strava_callback_state_decoded", user_id=user_id)
+            state_data = verify_token(state)
+            user_id = state_data.get("user_id")
+            
+            if not user_id:
+                raise ValueError("Invalid state: missing user_id")
+            
+            # Verify state exists in Redis cache
+            from cache import redis_client
+            if redis_client:
+                cached_state = redis_client.get(f"oauth_state:{state}")
+                if not cached_state:
+                    raise ValueError("State expired or already used")
+                
+                # Delete state to prevent reuse (one-time use)
+                redis_client.delete(f"oauth_state:{state}")
+            
+            logger.info("oauth_state_verified", user_id=user_id)
+            
         except Exception as e:
-            logger.error("failed_to_decode_state", error=str(e), state_preview=state[:20] if state else None)
+            logger.error("oauth_state_verification_failed", error=str(e))
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid or expired OAuth state token"
+            )
     
     # Fallback: try Authorization header
     if not user_id:

@@ -1600,26 +1600,65 @@ async def coach_weekly_report_email(
 async def download_calendar_file(
     filename: str,
     current_user: models.User = Depends(get_current_user),
-    db: "Session" = Depends(get_db),
 ):
     """
-    Скачивание .ics файла для текущего пользователя.
-    Файлы должны быть сохранены с user_id в имени или пути для изоляции.
+    Download calendar file (ICS) for authenticated user
+    
+    Security: Users can only download their own files
     """
-    # TODO: Add user_id to filename/path to ensure users only access their own files
-    # For now, we rely on authentication to prevent unauthorized access
+    # Security check: filename must start with user_{user_id}_
+    expected_prefix = f"user_{current_user.id}_"
+    if not filename.startswith(expected_prefix):
+        logger.warning(
+            "unauthorized_calendar_access_attempt",
+            user_id=current_user.id,
+            requested_filename=filename
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: You can only access your own calendar files"
+        )
+    
+    # Validate filename - prevent directory traversal
+    if ".." in filename or "/" in filename or "\\" in filename:
+        logger.warning(
+            "invalid_calendar_filename",
+            user_id=current_user.id,
+            filename=filename
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename"
+        )
+    
+    # Build file path
     filepath = EXPORTS_DIR / filename
-
-    if not filepath.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-
+    
+    # Check file exists and is a file (not directory)
+    if not filepath.exists() or not filepath.is_file():
+        logger.info(
+            "calendar_file_not_found",
+            user_id=current_user.id,
+            filename=filename
+        )
+        raise HTTPException(
+            status_code=404,
+            detail="Calendar file not found"
+        )
+    
+    logger.info(
+        "calendar_download_success",
+        user_id=current_user.id,
+        filename=filename
+    )
+    
     return FileResponse(
         path=str(filepath),
         media_type="text/calendar",
         filename=filename,
         headers={
-            "Content-Disposition": f'attachment; filename=\"{filename}\"'
-        },
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
     )
 @router.post("/coach/zones/auto_from_activities")
 async def calculate_zones_from_activities(

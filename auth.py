@@ -148,3 +148,15 @@ def verify_email_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def verify_token(token: str) -> dict:
+    """Verify JWT token and return payload. Raises exception if invalid."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
