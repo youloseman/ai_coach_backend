@@ -12,6 +12,8 @@ from cache import (
     get_cached_user_profile,
     cache_user_profile,
     TTL_USER_PROFILE,
+    user_profile_key,
+    invalidate_user_profile_cache,
 )
 
 
@@ -57,13 +59,11 @@ async def update_profile(
     db: Session = Depends(get_db),
 ):
     """Update current user's athlete profile. Invalidates cache."""
-    from cache import cache
-    
     profile = crud.update_user_profile(db, current_user.id, profile_update)
     profile_response = ProfileResponse.model_validate(profile)
     
     # Invalidate and update cache
-    cache.delete(f"user:profile:{current_user.id}")
+    invalidate_user_profile_cache(current_user.id)
     cache_user_profile(current_user.id, profile_response.model_dump())
     
     return profile_response
@@ -83,7 +83,6 @@ async def update_training_zones(
     - training_zones_run: {"threshold_pace_min_per_km": 4.0, "max_hr": 190}
     - training_zones_swim: {"css_pace_100m_seconds": 90, "max_hr": 190}
     """
-    from cache import cache
     from datetime import date
     
     # Get or create profile
@@ -137,8 +136,12 @@ async def update_training_zones(
     profile_response = ProfileResponse.model_validate(profile)
     
     # Invalidate and update cache
-    cache.delete(f"user:profile:{current_user.id}")
+    invalidate_user_profile_cache(current_user.id)
     cache_user_profile(current_user.id, profile_response.model_dump())
+    
+    # Invalidate training zones cache when zones are updated
+    from cache import invalidate_training_zones
+    invalidate_training_zones(current_user.id)
     
     return profile_response
 

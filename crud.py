@@ -40,14 +40,15 @@ def create_user(db: Session, user: UserCreate) -> User:
     )
     
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    
-    # Create default profile
+    db.flush()  # get db_user.id without committing
+
+    # Create default profile in the same transaction
     profile = AthleteProfileDB(user_id=db_user.id)
     db.add(profile)
+
     db.commit()
-    
+    db.refresh(db_user)
+
     return db_user
 
 
@@ -93,6 +94,10 @@ def update_user_profile(db: Session, user_id: int, profile_update: ProfileUpdate
     
     db.commit()
     db.refresh(profile)
+    
+    # Invalidate training zones cache when profile is updated
+    from cache import invalidate_training_zones
+    invalidate_training_zones(user_id)
     
     return profile
 
@@ -209,7 +214,7 @@ def _apply_activity_fields(activity: ActivityDB, user_id: int, strava_activity: 
     activity.raw_data = strava_activity
 
 
-def upsert_activity(db: Session, user_id: int, strava_activity: dict) -> ActivityDB:
+def upsert_activity(db: Session, user_id: int, strava_activity: dict, compute_tss: bool = True) -> ActivityDB:
     """Insert or update cached Strava activity for specific user."""
     existing = db.query(ActivityDB).filter(
         and_(
@@ -223,11 +228,12 @@ def upsert_activity(db: Session, user_id: int, strava_activity: dict) -> Activit
         db.commit()
         db.refresh(existing)
         # Calculate TSS if not already set
-        if existing.tss is None:
+        if compute_tss and existing.tss is None:
             from services.activity_service import calculate_and_save_tss
             user = db.query(User).filter(User.id == user_id).first()
             if user:
                 calculate_and_save_tss(existing, user, db)
+                # Note: For batch processing multiple activities, use calculate_tss_batch instead
         return existing
 
     activity = ActivityDB()
@@ -237,15 +243,17 @@ def upsert_activity(db: Session, user_id: int, strava_activity: dict) -> Activit
     db.refresh(activity)
     
     # Calculate TSS automatically
-    try:
-        from services.activity_service import calculate_and_save_tss
-        user = db.query(User).filter(User.id == user_id).first()
-        if user:
-            calculate_and_save_tss(activity, user, db)
-    except Exception as e:
-        # Don't fail if TSS calculation fails
-        from config import logger
-        logger.warning("tss_calculation_failed_on_import", activity_id=activity.id, error=str(e))
+    if compute_tss:
+        try:
+            from services.activity_service import calculate_and_save_tss
+            user = db.query(User).filter(User.id == user_id).first()
+            if user:
+                calculate_and_save_tss(activity, user, db)
+                # Note: For batch processing multiple activities, use calculate_tss_batch instead
+        except Exception as e:
+            # Don't fail if TSS calculation fails
+            from config import logger
+            logger.warning("tss_calculation_failed_on_import", activity_id=activity.id, error=str(e))
     
     return activity
 
@@ -331,7 +339,12 @@ def upsert_segment_effort(
 ) -> SegmentEffortDB:
     """Insert or update segment effort."""
     effort_id = str(strava_effort["id"])
-    existing = db.query(SegmentEffortDB).filter(SegmentEffortDB.strava_effort_id == effort_id).first()
+    existing = db.query(SegmentEffortDB).filter(
+        and_(
+            SegmentEffortDB.user_id == user_id,
+            SegmentEffortDB.strava_effort_id == effort_id
+        )
+    ).first()
     
     # Parse start date
     start_date_str = strava_effort.get("start_date") or strava_effort.get("start_date_local")

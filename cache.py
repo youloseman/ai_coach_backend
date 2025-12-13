@@ -125,17 +125,21 @@ class RedisCache:
             return False
     
     def delete_pattern(self, pattern: str) -> int:
-        """Delete all keys matching pattern"""
+        """Delete keys matching a pattern (uses SCAN to avoid blocking Redis)."""
         if not self.enabled or not self.client:
             return 0
-        
+
         try:
-            keys = self.client.keys(pattern)
-            if keys:
-                deleted = self.client.delete(*keys)
-                logger.info("cache_pattern_delete", pattern=pattern, count=deleted)
-                return deleted
-            return 0
+            deleted = 0
+            cursor = 0
+            while True:
+                cursor, keys = self.client.scan(cursor=cursor, match=pattern, count=500)
+                if keys:
+                    deleted += self.client.delete(*keys)
+                if cursor == 0:
+                    break
+            logger.info("cache_pattern_delete", pattern=pattern, count=deleted)
+            return deleted
         except Exception as e:
             logger.error("cache_pattern_delete_error", pattern=pattern, error=str(e))
             return 0
@@ -214,14 +218,32 @@ def invalidate_strava_cache(user_id: int) -> int:
     return cache.delete_pattern(pattern)
 
 
-def cache_training_zones(user_id: int, zones: dict) -> bool:
-    """Cache training zones"""
+def cache_training_zones(user_id: int, zones: dict, ttl: int = 3600) -> bool:
+    """
+    Cache training zones for user
+    
+    Args:
+        user_id: User ID
+        zones: Training zones dict
+        ttl: Time to live in seconds (default: 1 hour)
+    
+    Returns:
+        True if cached successfully
+    """
     key = training_zones_key(user_id)
-    return cache.set(key, zones, TTL_TRAINING_ZONES)
+    return cache.set(key, zones, ttl_seconds=ttl)
 
 
 def get_cached_training_zones(user_id: int) -> Optional[dict]:
-    """Get cached training zones"""
+    """
+    Get cached training zones for user
+    
+    Args:
+        user_id: User ID
+    
+    Returns:
+        Training zones dict or None if not cached
+    """
     key = training_zones_key(user_id)
     return cache.get(key)
 
@@ -244,4 +266,32 @@ def invalidate_user_cache(user_id: int) -> None:
     cache.delete(training_zones_key(user_id))
     cache.delete(athlete_profile_key(user_id))
     invalidate_strava_cache(user_id)
+
+
+def invalidate_user_profile_cache(user_id: int) -> bool:
+    """
+    Invalidate cached user profile
+    
+    Args:
+        user_id: User ID
+    
+    Returns:
+        True if invalidated successfully
+    """
+    key = user_profile_key(user_id)
+    return cache.delete(key)
+
+
+def invalidate_training_zones(user_id: int) -> bool:
+    """
+    Invalidate cached training zones when profile is updated
+    
+    Args:
+        user_id: User ID
+    
+    Returns:
+        True if invalidated successfully
+    """
+    key = training_zones_key(user_id)
+    return cache.delete(key)
 

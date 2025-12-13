@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, 
-    Text, JSON, ForeignKey, Date
+    Text, JSON, ForeignKey, Date, UniqueConstraint, Index
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -51,7 +51,7 @@ class AthleteProfileDB(Base):
     __tablename__ = "athlete_profiles"
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
     
     # Basic info
     age = Column(Integer, nullable=True)
@@ -93,8 +93,13 @@ class GoalDB(Base):
     """Training goals"""
     __tablename__ = "goals"
     
+    __table_args__ = (
+        Index('idx_goals_user_date', 'user_id', 'race_date'),
+        Index('idx_goals_user_type', 'user_id', 'goal_type'),
+    )
+    
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     
     goal_type = Column(String, nullable=False)  # SPRINT, OLYMPIC, HALF_IRONMAN, etc.
     target_time = Column(String, nullable=True)  # "4:30" or "sub 5:00"
@@ -116,8 +121,12 @@ class WeeklyPlanDB(Base):
     """Weekly training plans"""
     __tablename__ = "weekly_plans"
     
+    __table_args__ = (
+        Index('idx_weekly_plans_user_date', 'user_id', 'week_start_date'),
+    )
+    
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     
     week_start_date = Column(Date, nullable=False)
     week_number = Column(Integer, nullable=True)  # week in training cycle
@@ -126,7 +135,7 @@ class WeeklyPlanDB(Base):
     plan_json = Column(JSON, nullable=False)
     
     # Metadata
-    goal_id = Column(Integer, ForeignKey("goals.id"), nullable=True)
+    goal_id = Column(Integer, ForeignKey("goals.id", ondelete="SET NULL"), nullable=True)
     available_hours = Column(Float, nullable=True)
     coach_notes = Column(Text, nullable=True)
     
@@ -145,8 +154,14 @@ class ActivityDB(Base):
     """Cached Strava activities"""
     __tablename__ = "activities"
     
+    __table_args__ = (
+        Index('idx_activities_user_date', 'user_id', 'start_date'),
+        Index('idx_activities_user_sport', 'user_id', 'sport_type'),
+        Index('idx_activities_strava', 'strava_id'),
+    )
+    
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     
     strava_id = Column(String, unique=True, nullable=False, index=True)
     
@@ -189,8 +204,14 @@ class TrainingLoadDB(Base):
     """Daily training load calculations (CTL, ATL, TSB)"""
     __tablename__ = "training_load"
     
+    __table_args__ = (
+        UniqueConstraint('user_id', 'date', name='uix_training_load_user_date'),
+        Index('idx_training_load_user_date', 'user_id', 'date'),
+        {'sqlite_autoincrement': True},
+    )
+    
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     
     date = Column(Date, nullable=False)
     
@@ -207,11 +228,6 @@ class TrainingLoadDB(Base):
     swim_hours = Column(Float, default=0.0)
     
     calculated_at = Column(DateTime, default=func.now())
-    
-    # Composite unique constraint
-    __table_args__ = (
-        {'sqlite_autoincrement': True},
-    )
 
 
 class AppState(Base):
@@ -268,8 +284,8 @@ class SegmentEffortDB(Base):
     __tablename__ = "segment_efforts"
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    activity_id = Column(Integer, ForeignKey("activities.id"), nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    activity_id = Column(Integer, ForeignKey("activities.id", ondelete="SET NULL"), nullable=True, index=True)
     segment_id = Column(Integer, ForeignKey("segments.id"), nullable=False, index=True)
     
     strava_effort_id = Column(String, unique=True, nullable=False, index=True)
@@ -310,8 +326,8 @@ class PersonalRecordDB(Base):
     __tablename__ = "personal_records"
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    activity_id = Column(Integer, ForeignKey("activities.id"), nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    activity_id = Column(Integer, ForeignKey("activities.id", ondelete="SET NULL"), nullable=True, index=True)
     
     # Record type
     sport_type = Column(String, nullable=False, index=True)  # run, bike, swim
@@ -349,7 +365,7 @@ class InjuryRiskDB(Base):
     __tablename__ = "injury_risks"
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Risk assessment
     risk_level = Column(String, nullable=False)  # low, medium, high, critical
@@ -383,7 +399,7 @@ class NutritionTargetDB(Base):
     __tablename__ = "nutrition_targets"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Target calories and macros
     daily_calories = Column(Float, nullable=True)  # kcal
@@ -412,7 +428,7 @@ class NutritionPlanDB(Base):
     __tablename__ = "nutrition_plans"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Plan type
     plan_type = Column(String, nullable=False, index=True)
