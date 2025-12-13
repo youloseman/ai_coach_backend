@@ -56,6 +56,9 @@ if not RESEND_API_KEY and (not EMAIL_USER or not EMAIL_PASSWORD):
         "Email sending will not work."
     )
 
+# ===== REDIS CONFIG =====
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
 # ===== TRAINING CONSTANTS =====
 DEFAULT_MAX_VOLUME_INCREASE_PCT = 10  # максимум +10% в неделю
 DEFAULT_ACTIVITY_FETCH_LIMIT = 80
