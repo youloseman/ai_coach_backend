@@ -9,6 +9,7 @@ from models import (
 )
 from schemas import UserCreate, ProfileUpdate, GoalCreate
 from auth import get_password_hash
+from exceptions import ValidationError, NotFoundError, DatabaseError
 
 
 # ===== USER CRUD =====
@@ -29,27 +30,49 @@ def get_user_by_strava_athlete_id(db: Session, athlete_id: str) -> Optional[User
 
 
 def create_user(db: Session, user: UserCreate) -> User:
-    """Create new user with hashed password"""
-    hashed_password = get_password_hash(user.password)
-    
-    db_user = User(
-        email=user.email,
-        username=user.username,
-        hashed_password=hashed_password,
-        full_name=user.full_name
-    )
-    
-    db.add(db_user)
-    db.flush()  # get db_user.id without committing
-
-    # Create default profile in the same transaction
-    profile = AthleteProfileDB(user_id=db_user.id)
-    db.add(profile)
-
-    db.commit()
-    db.refresh(db_user)
-
-    return db_user
+    """Create new user with profile"""
+    try:
+        # Check if email exists
+        existing = db.query(User).filter(User.email == user.email).first()
+        if existing:
+            raise ValidationError(f"User with email {user.email} already exists")
+        
+        # Check if username exists
+        existing_username = db.query(User).filter(User.username == user.username).first()
+        if existing_username:
+            raise ValidationError(f"User with username {user.username} already exists")
+        
+        # Create user
+        hashed_password = get_password_hash(user.password)
+        db_user = User(
+            email=user.email,
+            username=user.username,
+            hashed_password=hashed_password,
+            full_name=user.full_name
+        )
+        db.add(db_user)
+        db.flush()  # Get ID
+        
+        # Create profile
+        profile = AthleteProfileDB(user_id=db_user.id)
+        db.add(profile)
+        
+        # Single commit
+        db.commit()
+        db.refresh(db_user)
+        
+        from config import logger
+        logger.info("user_created", user_id=db_user.id, email=user.email)
+        return db_user
+        
+    except ValidationError:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        from config import logger
+        logger.error("user_creation_failed", error=str(e))
+        raise DatabaseError("Failed to create user")
 
 
 def update_user_last_login(db: Session, user_id: int):
@@ -80,48 +103,67 @@ def get_user_profile(db: Session, user_id: int) -> Optional[AthleteProfileDB]:
 
 def update_user_profile(db: Session, user_id: int, profile_update: ProfileUpdate) -> AthleteProfileDB:
     """Update athlete profile"""
-    profile = get_user_profile(db, user_id)
-    
-    if not profile:
-        # Create if doesn't exist
-        profile = AthleteProfileDB(user_id=user_id)
-        db.add(profile)
-    
-    # Update fields
-    update_data = profile_update.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(profile, field, value)
-    
-    db.commit()
-    db.refresh(profile)
-    
-    # Invalidate training zones cache when profile is updated
-    from cache import invalidate_training_zones
-    invalidate_training_zones(user_id)
-    
-    return profile
+    try:
+        profile = get_user_profile(db, user_id)
+        
+        if not profile:
+            raise NotFoundError(f"Profile not found for user {user_id}")
+        
+        # Update fields
+        update_data = profile_update.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            if hasattr(profile, field):
+                setattr(profile, field, value)
+        
+        db.commit()
+        db.refresh(profile)
+        
+        # Invalidate cache
+        from cache import invalidate_training_zones
+        invalidate_training_zones(user_id)
+        
+        from config import logger
+        logger.info("profile_updated", user_id=user_id)
+        return profile
+        
+    except NotFoundError:
+        raise
+    except Exception as e:
+        db.rollback()
+        from config import logger
+        logger.error("profile_update_failed", user_id=user_id, error=str(e))
+        raise DatabaseError("Failed to update profile")
 
 
 # ===== GOAL CRUD =====
 
 def create_goal(db: Session, user_id: int, goal: GoalCreate) -> GoalDB:
     """Create new training goal"""
-    # If this is primary goal, unset other primary goals
-    if goal.is_primary:
-        db.query(GoalDB).filter(
-            and_(GoalDB.user_id == user_id, GoalDB.is_primary == True)
-        ).update({"is_primary": False})
-    
-    db_goal = GoalDB(
-        user_id=user_id,
-        **goal.model_dump()
-    )
-    
-    db.add(db_goal)
-    db.commit()
-    db.refresh(db_goal)
-    
-    return db_goal
+    try:
+        # If this is primary goal, unset other primary goals
+        if goal.is_primary:
+            db.query(GoalDB).filter(
+                and_(GoalDB.user_id == user_id, GoalDB.is_primary == True)
+            ).update({"is_primary": False})
+        
+        db_goal = GoalDB(
+            user_id=user_id,
+            **goal.model_dump()
+        )
+        
+        db.add(db_goal)
+        db.commit()
+        db.refresh(db_goal)
+        
+        from config import logger
+        logger.info("goal_created", goal_id=db_goal.id, user_id=user_id)
+        return db_goal
+        
+    except Exception as e:
+        db.rollback()
+        from config import logger
+        logger.error("goal_creation_failed", user_id=user_id, error=str(e))
+        raise DatabaseError("Failed to create goal")
 
 
 def get_user_goals(db: Session, user_id: int, include_completed: bool = False) -> List[GoalDB]:
@@ -152,35 +194,42 @@ def save_weekly_plan_db(
     available_hours: Optional[float] = None
 ) -> WeeklyPlanDB:
     """Save or update weekly plan"""
-    # Check if plan exists
-    existing = db.query(WeeklyPlanDB).filter(
-        and_(
-            WeeklyPlanDB.user_id == user_id,
-            WeeklyPlanDB.week_start_date == week_start_date
-        )
-    ).first()
-    
-    if existing:
-        # Update existing
-        existing.plan_json = plan_json
-        existing.goal_id = goal_id
-        existing.available_hours = available_hours
-        db.commit()
-        db.refresh(existing)
-        return existing
-    else:
-        # Create new
-        plan = WeeklyPlanDB(
-            user_id=user_id,
-            week_start_date=week_start_date,
-            plan_json=plan_json,
-            goal_id=goal_id,
-            available_hours=available_hours
-        )
-        db.add(plan)
-        db.commit()
-        db.refresh(plan)
-        return plan
+    try:
+        # Check if plan exists
+        existing = db.query(WeeklyPlanDB).filter(
+            and_(
+                WeeklyPlanDB.user_id == user_id,
+                WeeklyPlanDB.week_start_date == week_start_date
+            )
+        ).first()
+        
+        if existing:
+            # Update existing
+            existing.plan_json = plan_json
+            existing.goal_id = goal_id
+            existing.available_hours = available_hours
+            db.commit()
+            db.refresh(existing)
+            return existing
+        else:
+            # Create new
+            plan = WeeklyPlanDB(
+                user_id=user_id,
+                week_start_date=week_start_date,
+                plan_json=plan_json,
+                goal_id=goal_id,
+                available_hours=available_hours
+            )
+            db.add(plan)
+            db.commit()
+            db.refresh(plan)
+            return plan
+            
+    except Exception as e:
+        db.rollback()
+        from config import logger
+        logger.error("weekly_plan_save_failed", user_id=user_id, week_start_date=str(week_start_date), error=str(e))
+        raise DatabaseError("Failed to save weekly plan")
 
 
 def get_weekly_plan_db(db: Session, user_id: int, week_start_date: date) -> Optional[WeeklyPlanDB]:
@@ -216,46 +265,58 @@ def _apply_activity_fields(activity: ActivityDB, user_id: int, strava_activity: 
 
 def upsert_activity(db: Session, user_id: int, strava_activity: dict, compute_tss: bool = True) -> ActivityDB:
     """Insert or update cached Strava activity for specific user."""
-    existing = db.query(ActivityDB).filter(
-        and_(
-            ActivityDB.user_id == user_id,
-            ActivityDB.strava_id == str(strava_activity["id"])
-        )
-    ).first()
+    try:
+        existing = db.query(ActivityDB).filter(
+            and_(
+                ActivityDB.user_id == user_id,
+                ActivityDB.strava_id == str(strava_activity["id"])
+            )
+        ).first()
 
-    if existing:
-        _apply_activity_fields(existing, user_id, strava_activity)
+        if existing:
+            _apply_activity_fields(existing, user_id, strava_activity)
+            db.commit()
+            db.refresh(existing)
+            # Calculate TSS if not already set
+            if compute_tss and existing.tss is None:
+                try:
+                    from services.activity_service import calculate_and_save_tss
+                    user = db.query(User).filter(User.id == user_id).first()
+                    if user:
+                        calculate_and_save_tss(existing, user, db)
+                        # Note: For batch processing multiple activities, use calculate_tss_batch instead
+                except Exception as e:
+                    # Don't fail if TSS calculation fails
+                    from config import logger
+                    logger.warning("tss_calculation_failed_on_import", activity_id=existing.id, error=str(e))
+            return existing
+
+        activity = ActivityDB()
+        _apply_activity_fields(activity, user_id, strava_activity)
+        db.add(activity)
         db.commit()
-        db.refresh(existing)
-        # Calculate TSS if not already set
-        if compute_tss and existing.tss is None:
-            from services.activity_service import calculate_and_save_tss
-            user = db.query(User).filter(User.id == user_id).first()
-            if user:
-                calculate_and_save_tss(existing, user, db)
-                # Note: For batch processing multiple activities, use calculate_tss_batch instead
-        return existing
+        db.refresh(activity)
 
-    activity = ActivityDB()
-    _apply_activity_fields(activity, user_id, strava_activity)
-    db.add(activity)
-    db.commit()
-    db.refresh(activity)
-    
-    # Calculate TSS automatically
-    if compute_tss:
-        try:
-            from services.activity_service import calculate_and_save_tss
-            user = db.query(User).filter(User.id == user_id).first()
-            if user:
-                calculate_and_save_tss(activity, user, db)
-                # Note: For batch processing multiple activities, use calculate_tss_batch instead
-        except Exception as e:
-            # Don't fail if TSS calculation fails
-            from config import logger
-            logger.warning("tss_calculation_failed_on_import", activity_id=activity.id, error=str(e))
-    
-    return activity
+        # Calculate TSS automatically
+        if compute_tss:
+            try:
+                from services.activity_service import calculate_and_save_tss
+                user = db.query(User).filter(User.id == user_id).first()
+                if user:
+                    calculate_and_save_tss(activity, user, db)
+                    # Note: For batch processing multiple activities, use calculate_tss_batch instead
+            except Exception as e:
+                # Don't fail if TSS calculation fails
+                from config import logger
+                logger.warning("tss_calculation_failed_on_import", activity_id=activity.id, error=str(e))
+
+        return activity
+        
+    except Exception as e:
+        db.rollback()
+        from config import logger
+        logger.error("activity_upsert_failed", user_id=user_id, activity_id=strava_activity.get("id"), error=str(e))
+        raise DatabaseError("Failed to upsert activity")
 
 
 def cache_activity(db: Session, user_id: int, strava_activity: dict):

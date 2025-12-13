@@ -52,6 +52,7 @@ from api_segments import router as segments_router
 from api_nutrition import router as nutrition_router
 from api_analytics import router as analytics_router
 from segment_sync import sync_segment_efforts_for_activity, detect_personal_records
+from exceptions import AppException
 import threading
 
 # Initialize cache on startup (for logging and connection testing)
@@ -104,6 +105,42 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Global exception handlers
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
+    """Handle application exceptions"""
+    logger.error(
+        "app_exception",
+        error=exc.message,
+        status_code=exc.status_code,
+        path=request.url.path
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.message,
+            "status_code": exc.status_code
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle unexpected exceptions"""
+    logger.error(
+        "unexpected_exception",
+        error=str(exc),
+        path=request.url.path,
+        exc_info=True
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "message": "An unexpected error occurred"
+        }
+    )
+
 # Initialize database (non-blocking, errors are logged but don't crash app)
 # This runs in background to not block startup
 def init_db_async():
@@ -131,6 +168,7 @@ except Exception as e:
 
 app.include_router(auth_router)
 app.include_router(user_router)
+# Coach router has its own limiter for per-user rate limiting
 app.include_router(coach_router)
 app.include_router(segments_router)
 app.include_router(nutrition_router)
@@ -647,7 +685,9 @@ async def root():
 
 
 @app.get("/strava/connect")
+@limiter.limit("10/hour")  # Max 10 OAuth attempts per hour
 async def strava_connect(
+    request: Request,
     current_user: models.User = Depends(get_current_user),
 ):
     """
@@ -1006,7 +1046,7 @@ async def strava_webhook_event(request: Request, db: Session = Depends(get_db)):
                 status_code=500, detail="Failed to process webhook event"
             )
     elif aspect_type == "delete":
-        crud.delete_activity_by_strava_id(db, str(activity_id))
+        crud.delete_activity_by_strava_id(db, user.id, str(activity_id))
         logger.info(
             "strava_webhook_activity_deleted",
             user_id=user.id,

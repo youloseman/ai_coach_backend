@@ -60,12 +60,35 @@ class PMCCalculator:
                 "rr": []
             }
         
+        # Remove duplicates by id/strava_id
+        seen_ids = set()
+        unique_activities = []
+        for activity in activities:
+            activity_id = activity.get("id") or activity.get("strava_id")
+            if activity_id and activity_id not in seen_ids:
+                seen_ids.add(activity_id)
+                unique_activities.append(activity)
+            elif not activity_id:
+                unique_activities.append(activity)
+        
+        activities = unique_activities
+        
         # Sort by date
         activities = sorted(activities, key=lambda x: x["date"])
         
-        # Date range
-        start_date = datetime.strptime(activities[0]["date"], "%Y-%m-%d")
-        end_date = datetime.strptime(activities[-1]["date"], "%Y-%m-%d")
+        # Date range - handle both string and datetime
+        first_date = activities[0]["date"]
+        last_date = activities[-1]["date"]
+        
+        if isinstance(first_date, str):
+            start_date = datetime.strptime(first_date, "%Y-%m-%d")
+        else:
+            start_date = first_date  # Already datetime
+        
+        if isinstance(last_date, str):
+            end_date = datetime.strptime(last_date, "%Y-%m-%d")
+        else:
+            end_date = last_date  # Already datetime
         
         # Create arrays
         days = (end_date - start_date).days + 1
@@ -79,11 +102,25 @@ class PMCCalculator:
         rr = [0.0] * days
         
         # Fill stress array (daily TSS)
+        # Pre-parse all dates for performance
         for activity in activities:
-            act_date = datetime.strptime(activity["date"], "%Y-%m-%d")
+            try:
+                if isinstance(activity["date"], str):
+                    act_date = datetime.strptime(activity["date"], "%Y-%m-%d")
+                else:
+                    act_date = activity["date"]  # Already datetime
+            except (ValueError, KeyError):
+                continue
+            
             offset = (act_date - start_date).days
             if 0 <= offset < days:
-                stress[offset] += activity.get("tss", 0)
+                tss = activity.get("tss", 0)
+                # Validate TSS
+                if tss < 0:
+                    tss = 0
+                elif tss > 1000:
+                    tss = 500  # Cap at reasonable max
+                stress[offset] += tss
         
         # Calculate CTL and ATL using exponential moving average
         # Based on GoldenCheetah PMCData.cpp lines 341-367
@@ -144,7 +181,13 @@ class PMCCalculator:
         
         # Current metrics should be computed at the last activity date
         last_activity_date = max(a["date"] for a in activities)
-        latest_idx = pmc["dates"].index(last_activity_date)
+        
+        if isinstance(last_activity_date, datetime):
+            last_activity_date_str = last_activity_date.strftime("%Y-%m-%d")
+        else:
+            last_activity_date_str = str(last_activity_date)
+        
+        latest_idx = pmc["dates"].index(last_activity_date_str)
         
         return {
             "date": pmc["dates"][latest_idx],

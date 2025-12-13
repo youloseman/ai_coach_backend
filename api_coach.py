@@ -3,9 +3,10 @@ import json
 from typing import Optional, List
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
+from slowapi import Limiter
 
 from athlete_profile import AthleteProfile
 from strava_client import (
@@ -61,10 +62,28 @@ from database import get_db
 from sqlalchemy.orm import Session
 import models
 import crud
-from auth import get_current_user
+from auth import get_current_user, decode_access_token
 
 
 router = APIRouter()
+
+# Rate limiter for coach endpoints (per user)
+def get_user_id_for_limiter(request: Request) -> str:
+    """Extract user_id from JWT token for rate limiting"""
+    try:
+        # Get token from Authorization header
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return "anonymous"
+        token = auth_header.replace("Bearer ", "")
+        payload = decode_access_token(token)
+        if payload and payload.get("sub"):
+            return str(payload.get("sub"))
+    except Exception:
+        pass
+    return "anonymous"
+
+limiter = Limiter(key_func=get_user_id_for_limiter)
 
 BASE_DIR = Path(__file__).resolve().parent
 EXPORTS_DIR = BASE_DIR / "data" / "calendar_exports"
@@ -404,7 +423,9 @@ async def auto_update_profile_from_history(
 
 
 @router.post("/coach/plan")
+@limiter.limit("5/hour")  # Max 5 plan generations per hour
 async def coach_plan(
+    request: Request,
     req: WeeklyPlanRequest,
     current_user: models.User = Depends(get_current_user),
     db: "Session" = Depends(get_db),
@@ -750,7 +771,13 @@ async def complete_workout(
 
 
 @router.post("/coach/multi_week_plan")
-async def generate_multi_week_training_plan(req: MultiWeekPlanRequest):
+@limiter.limit("3/hour")  # Max 3 multi-week plans per hour
+async def generate_multi_week_training_plan(
+    request: Request,
+    req: MultiWeekPlanRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: "Session" = Depends(get_db),
+):
     """
     Генерирует долгосрочный план тренировок на N недель с периодизацией.
     """
@@ -964,7 +991,9 @@ async def send_multi_week_plan_email(
 
 
 @router.post("/coach/weekly_report_email")
+@limiter.limit("3/hour")  # Max 3 email reports per hour
 async def coach_weekly_report_email(
+    request: Request,
     req: WeeklyReportEmailRequest,
     current_user: models.User = Depends(get_current_user),
     db: "Session" = Depends(get_db),
